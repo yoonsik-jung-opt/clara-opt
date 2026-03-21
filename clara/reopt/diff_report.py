@@ -72,6 +72,7 @@ class DiffReporter:
             new_bottleneck=new_bn,
             bottleneck_shifted=old_bn != new_bn,
             summary=summary,
+            old_var_names=old_state.variable_names,
         )
 
     def _compute_variable_changes(

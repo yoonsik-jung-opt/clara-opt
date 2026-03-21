@@ -201,7 +201,7 @@ class ConstraintChange:
     became_nonbinding: bool
 
 
-@dataclass
+@dataclass(frozen=True)
 class DiffReport:
     """Complete comparison of two solutions."""
     change: ParameterChange
@@ -225,6 +225,7 @@ class DiffReport:
     bottleneck_shifted: bool
 
     summary: str
+    old_var_names: tuple[str, ...] = ()
 
     def to_text(self) -> str:
         """Full text diff report."""
@@ -235,14 +236,26 @@ class DiffReport:
         lines.append("PARAMETER CHANGE")
         lines.append(f"  Type: {self.change.change_type.name}")
         lines.append(f"  {self.change.summary}")
-        if self.change.delta_b is not None:
-            for i, d in enumerate(self.change.delta_b):
-                if abs(d) > 1e-10:
-                    lines.append(f"    delta_b[{i}] = {d:+.4f}")
+
+        # RHS changes — use constraint names from constraint_changes
+        rhs_changed = [cc for cc in self.constraint_changes
+                       if abs(cc.new_rhs - cc.old_rhs) > 1e-10]
+        if rhs_changed:
+            lines.append("  RHS changes:")
+            for cc in rhs_changed:
+                d = cc.new_rhs - cc.old_rhs
+                lines.append(f"    {cc.name}: {cc.old_rhs:.0f} \u2192 {cc.new_rhs:.0f} ({d:+.0f})")
+
+        # Obj coeff changes — use old_var_names for delta_c display
         if self.change.delta_c is not None:
-            for i, d in enumerate(self.change.delta_c):
-                if abs(d) > 1e-10:
-                    lines.append(f"    delta_c[{i}] = {d:+.4f}")
+            changed = [(i, d) for i, d in enumerate(self.change.delta_c) if abs(d) > 1e-10]
+            if changed:
+                lines.append("  Objective coefficient changes:")
+                for idx, d in changed:
+                    name = self.old_var_names[idx] if idx < len(self.old_var_names) else f"var[{idx}]"
+                    old_c = d  # delta only; we don't have original c here
+                    lines.append(f"    {name}: {d:+.4f}")
+
         lines.append("")
 
         # Reoptimization
