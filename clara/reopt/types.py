@@ -133,6 +133,42 @@ class ReoptDecision:
 
 
 # ============================================================
+# Reoptimization result
+# ============================================================
+
+@dataclass(frozen=True)
+class ReoptResult:
+    """Output of the Reoptimizer."""
+    new_state: SolveState
+    method_used: str        # "none", "recompute", "warm_start", "parametric_lp", "scratch"
+    pivots: int
+    scratch_estimate: Optional[int]
+    basis_preserved: bool
+    reopt_time_seconds: float
+
+    @property
+    def speedup(self) -> Optional[float]:
+        """Estimated speedup vs scratch solve."""
+        if self.scratch_estimate and self.scratch_estimate > 0:
+            return self.scratch_estimate / max(self.pivots, 1)
+        return None
+
+    @property
+    def summary(self) -> str:
+        """One-line summary."""
+        if self.basis_preserved:
+            return (
+                f"Basis preserved — recomputed in {self.reopt_time_seconds:.4f}s "
+                f"(0 pivots)."
+            )
+        sp = f" (est. {self.speedup:.1f}x speedup)" if self.speedup else ""
+        return (
+            f"Reoptimized via {self.method_used}: {self.pivots} pivots "
+            f"in {self.reopt_time_seconds:.4f}s{sp}."
+        )
+
+
+# ============================================================
 # Solution diff output
 # ============================================================
 

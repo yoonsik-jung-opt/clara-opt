@@ -7,5 +7,6 @@ from clara.reopt.types import (
     IncompatibleProblemsError,
     ParameterChange,
     ReoptDecision,
+    ReoptResult,
     SolutionDiff,
 )
