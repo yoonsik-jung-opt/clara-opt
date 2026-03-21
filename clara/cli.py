@@ -126,20 +126,6 @@ def _parse_file(filepath: str):
 
 
 def _solve(problem, engine_name: str):
-    """Solve with the selected engine."""
-    solver = _make_engine(engine_name)
-    state = solver.solve()
-    return state
-
-
-def _make_engine(engine_name: str):
-    """Factory for solve engines. Returns a solver instance (not yet solved)."""
-    # For now, we need the problem to create the solver.
-    # This is handled differently — _solve creates the engine with the problem.
-    raise NotImplementedError  # not used directly
-
-
-def _solve(problem, engine_name: str):
     """Solve with the selected engine. Auto-detects LP vs MIP for internal engine."""
     if engine_name == "highs":
         try:
