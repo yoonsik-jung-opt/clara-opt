@@ -144,8 +144,7 @@ def _solve(problem, engine_name: str):
     if engine_name == "highs":
         try:
             from clara.engine.highs_backend import HiGHSBackend
-            solver = HiGHSBackend(problem)
-            return solver.solve()
+            return HiGHSBackend().solve(problem)
         except (ImportError, ModuleNotFoundError):
             click.secho(
                 "HiGHS backend not yet available. Using internal engine.",
