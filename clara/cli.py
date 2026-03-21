@@ -140,7 +140,7 @@ def _make_engine(engine_name: str):
 
 
 def _solve(problem, engine_name: str):
-    """Solve with the selected engine."""
+    """Solve with the selected engine. Auto-detects LP vs MIP for internal engine."""
     if engine_name == "highs":
         try:
             from clara.engine.highs_backend import HiGHSBackend
@@ -151,8 +151,12 @@ def _solve(problem, engine_name: str):
                 fg="yellow", err=True,
             )
 
-    solver = RevisedSimplex(problem)
-    return solver.solve()
+    # Auto-detect LP vs MIP
+    if problem.has_integers:
+        from clara.engine.bnb import InternalBnB
+        return InternalBnB().solve(problem)
+
+    return RevisedSimplex(problem).solve()
 
 
 def _format_solve_text(state) -> str:
