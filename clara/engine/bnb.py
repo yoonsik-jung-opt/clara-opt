@@ -203,7 +203,9 @@ class InternalBnB:
                 ))
                 continue
 
-            # Solve LP at this node
+            # Solve LP at this node.
+            # Note: Currently cold-starts each node LP. Warm-start via parent
+            # B⁻¹ is a future optimization.
             node_problem = self._add_bound_constraints(problem, node.branch_constraints)
             node_state = RevisedSimplex(node_problem).solve()
             nodes_explored += 1
