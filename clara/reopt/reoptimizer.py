@@ -204,12 +204,9 @@ class Reoptimizer:
     ) -> ReoptResult:
         """Warm-start simplex from the old basis.
 
-        For Type R (RHS change, basis broken): the old basis may be primal
-        infeasible with the new RHS. We use the Big-M Phase I path which
-        handles negative x_B values.
-
-        For Type C (obj change, basis broken): the old basis is primal feasible
-        but dual infeasible. The normal simplex loop handles this (re-pricing).
+        For Type R (primal infeasible, dual feasible): dual simplex warm-start.
+        For Type C (primal feasible, dual infeasible): primal simplex warm-start.
+        For Type RC or both infeasible: scratch fallback.
         """
         B_inv = old_state.basis_inverse
         if B_inv is None:
@@ -218,18 +215,24 @@ class Reoptimizer:
         basis = self._extract_basis_indices(old_state, new_problem)
         solver = RevisedSimplex.from_warm_start(new_problem, basis, B_inv)
 
-        # Check if warm-started basis is primal feasible
         x_B = B_inv @ new_problem.b
-        if np.any(x_B < -1e-8):
-            # Primal infeasible — solve from scratch (dual simplex not implemented)
-            # The scratch solve will be fast for near-optimal warm starts
-            return self._scratch(new_problem)
+        primal_infeasible = bool(np.any(x_B < -1e-8))
 
-        new_state = solver.solve()
+        if primal_infeasible and solver._is_dual_feasible():
+            # Type R: c unchanged → dual feasible → dual simplex
+            new_state = solver.solve_dual()
+            method = "warm_start_dual"
+        elif primal_infeasible:
+            # Both primal and dual infeasible → scratch
+            return self._scratch(new_problem)
+        else:
+            # Primal feasible → primal simplex
+            new_state = solver.solve()
+            method = "warm_start"
 
         return ReoptResult(
             new_state=new_state,
-            method_used="warm_start",
+            method_used=method,
             pivots=len(solver.iterations),
             scratch_estimate=old_state.iteration_count,
             basis_preserved=False,
