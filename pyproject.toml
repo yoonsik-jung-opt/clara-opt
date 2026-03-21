@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clara-opt"
+version = "0.1.0"
+description = "A white-box optimization solver that explains why solutions are optimal, when reoptimization is needed, and what changed."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Yoonsik" },
+]
+dependencies = [
+    "numpy",
+    "highspy",
+    "click",
+]
+
+[project.scripts]
+clara = "clara.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "hypothesis",
+    "ruff",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
