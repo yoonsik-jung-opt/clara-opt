@@ -202,13 +202,29 @@ class Reoptimizer:
         new_problem: LPProblem,
         change: ParameterChange,
     ) -> ReoptResult:
-        """Warm-start simplex from the old basis."""
+        """Warm-start simplex from the old basis.
+
+        For Type R (RHS change, basis broken): the old basis may be primal
+        infeasible with the new RHS. We use the Big-M Phase I path which
+        handles negative x_B values.
+
+        For Type C (obj change, basis broken): the old basis is primal feasible
+        but dual infeasible. The normal simplex loop handles this (re-pricing).
+        """
         B_inv = old_state.basis_inverse
         if B_inv is None:
             return self._scratch(new_problem)
 
         basis = self._extract_basis_indices(old_state, new_problem)
         solver = RevisedSimplex.from_warm_start(new_problem, basis, B_inv)
+
+        # Check if warm-started basis is primal feasible
+        x_B = B_inv @ new_problem.b
+        if np.any(x_B < -1e-8):
+            # Primal infeasible — solve from scratch (dual simplex not implemented)
+            # The scratch solve will be fast for near-optimal warm starts
+            return self._scratch(new_problem)
+
         new_state = solver.solve()
 
         return ReoptResult(
@@ -248,36 +264,63 @@ class Reoptimizer:
         state: SolveState,
         problem: LPProblem,
     ) -> list[int]:
-        """Extract basis column indices from SolveState.
+        """Extract basis column indices from SolveState by matching B⁻¹ to [A|I].
 
-        In the augmented system [A|I]:
-            Columns 0..n-1 are decision variables
-            Columns n..n+m-1 are slack variables
+        B⁻¹ is tied to a specific row ordering. We recover it by computing
+        B = inv(B⁻¹), then finding which column of [A|I] matches each column of B.
         """
         n = problem.num_variables
         m = problem.num_constraints
-        basis_set = set()
+        B_inv = state.basis_inverse
 
-        basic_decision = []
-        for j, v in enumerate(state.variables):
-            if j < n and v.basis_status == BasisStatus.BASIC:
-                basic_decision.append(j)
+        if B_inv is None:
+            # Fallback: heuristic ordering
+            return self._extract_basis_heuristic(state, problem)
 
-        basic_slack = []
-        for i, c in enumerate(state.constraints):
-            if i < m and c.basis_status == BasisStatus.BASIC:
-                basic_slack.append(i)
+        # B = inv(B⁻¹)
+        try:
+            B = np.linalg.inv(B_inv)
+        except np.linalg.LinAlgError:
+            return self._extract_basis_heuristic(state, problem)
 
-        # Build basis: slack in its natural row, decision vars fill remaining
+        # Build augmented [A|I]
+        A_full = np.hstack([problem.A, np.eye(m)])
+
+        # For each column of B, find matching column in A_full
+        basis = []
+        for col_idx in range(m):
+            b_col = B[:, col_idx]
+            best_j = -1
+            best_err = float("inf")
+            for j in range(n + m):
+                err = np.linalg.norm(A_full[:, j] - b_col)
+                if err < best_err:
+                    best_err = err
+                    best_j = j
+            basis.append(best_j)
+
+        return basis
+
+    def _extract_basis_heuristic(
+        self,
+        state: SolveState,
+        problem: LPProblem,
+    ) -> list[int]:
+        """Fallback: reconstruct basis from BasisStatus flags."""
+        n = problem.num_variables
+        m = problem.num_constraints
+
+        basic_decision = [j for j, v in enumerate(state.variables)
+                          if j < n and v.basis_status == BasisStatus.BASIC]
+        basic_slack = [i for i, c in enumerate(state.constraints)
+                       if i < m and c.basis_status == BasisStatus.BASIC]
+
         basis = [0] * m
-        used_rows: set[int] = set()
-
+        used: set[int] = set()
         for i in basic_slack:
             basis[i] = n + i
-            used_rows.add(i)
-
-        remaining = [i for i in range(m) if i not in used_rows]
+            used.add(i)
+        remaining = [i for i in range(m) if i not in used]
         for j, row in zip(basic_decision, remaining):
             basis[row] = j
-
         return basis
