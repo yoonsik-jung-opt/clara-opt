@@ -110,10 +110,9 @@ class TestMethodRecompute:
 class TestMethodWarmStart:
 
     def test_warmstart_albici_b2(self, base_state):
-        """b2: basis broken (primal infeasible) → falls back to scratch → optimal = 4300."""
+        """b2: basis broken (primal infeasible, dual feasible) → dual simplex → optimal = 4300."""
         result, _ = full_pipeline(albici_base(), albici_b2(), base_state)
-        # Falls back to scratch because old basis is primal infeasible with new RHS
-        assert result.method_used == "scratch"
+        assert result.method_used == "warm_start_dual"
         assert abs(result.new_state.optimal_value - 4300.0) < TOL
 
     def test_warmstart_type_c(self, base_state):
