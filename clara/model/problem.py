@@ -25,6 +25,10 @@ class LPProblem:
     var_names: list[str] = field(default_factory=list)
     constraint_names: list[str] = field(default_factory=list)
     name: str = ""
+    lower_bounds: np.ndarray | None = None
+    upper_bounds: np.ndarray | None = None
+    integer_vars: set[int] = field(default_factory=set)
+    binary_vars: set[int] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.c = np.asarray(self.c, dtype=float)
@@ -36,6 +40,14 @@ class LPProblem:
             self.var_names = [f"x{j+1}" for j in range(n)]
         if not self.constraint_names:
             self.constraint_names = [f"C{i+1}" for i in range(m)]
+        if self.lower_bounds is None:
+            self.lower_bounds = np.zeros(n)
+        else:
+            self.lower_bounds = np.asarray(self.lower_bounds, dtype=float)
+        if self.upper_bounds is None:
+            self.upper_bounds = np.full(n, np.inf)
+        else:
+            self.upper_bounds = np.asarray(self.upper_bounds, dtype=float)
 
     @property
     def num_variables(self) -> int:
@@ -44,3 +56,7 @@ class LPProblem:
     @property
     def num_constraints(self) -> int:
         return self.A.shape[0]
+
+    @property
+    def has_integers(self) -> bool:
+        return bool(self.integer_vars or self.binary_vars)

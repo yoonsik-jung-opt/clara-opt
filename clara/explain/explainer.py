@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Optional
 
 from clara.explain.binding import BindingReportGenerator
+from clara.explain.bnb_report import BnBReportGenerator
 from clara.explain.sensitivity import SensitivityReportGenerator
 from clara.explain.types import (
     BasicVarItem,
@@ -56,6 +57,7 @@ class Explainer:
                 obj_coeffs[name] = float(problem.c[j])
 
         header = self._make_header(state)
+        bnb = BnBReportGenerator().generate(state, level)
         binding = self._binding.generate(state, level)
         variable = self._make_variable_report(state, level, obj_coeffs)
         sensitivity = self._sensitivity.generate(state, level, obj_coeffs)
@@ -65,6 +67,7 @@ class Explainer:
             variable=variable,
             sensitivity=sensitivity,
             header=header,
+            bnb=bnb,
         )
 
     def _make_header(self, state: SolveState) -> str:

@@ -155,6 +155,36 @@ class TestEngineOption:
 
 
 # ============================================================
+# 4b. MIP via CLI
+# ============================================================
+
+KNAPSACK = str(FIXTURES / "knapsack_small.lp")
+
+
+class TestMIPCLI:
+
+    def test_explain_mip_file(self, runner):
+        result = runner.invoke(main, ["explain", KNAPSACK])
+        assert result.exit_code == 0
+        assert "42.0000" in result.output
+
+    def test_explain_mip_has_bnb_section(self, runner):
+        result = runner.invoke(main, ["explain", KNAPSACK])
+        assert "BRANCH-AND-BOUND" in result.output
+
+    def test_explain_mip_json(self, runner):
+        result = runner.invoke(main, ["explain", KNAPSACK, "--format", "json"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert "bnb_report" in parsed
+
+    def test_solve_mip(self, runner):
+        result = runner.invoke(main, ["solve", KNAPSACK])
+        assert result.exit_code == 0
+        assert "42.0000" in result.output
+
+
+# ============================================================
 # 5. Error handling
 # ============================================================
 
