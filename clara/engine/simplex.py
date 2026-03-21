@@ -91,18 +91,26 @@ class RevisedSimplex:
         if np.any(self.b < -PIVOT_TOL):
             return self._solve_with_bigm(start_time)
 
-        status = SolveStatus.OPTIMAL
+        status = self._simplex_loop()
+        elapsed = time.perf_counter() - start_time
+        return self._make_state(status, elapsed)
+
+    def _simplex_loop(self) -> SolveStatus:
+        """Core simplex pivot loop. Shared by solve() and _solve_with_bigm().
+
+        Performs pricing, ratio test, pivot, and records IterationSnapshots.
+        Modifies self.B_inv, self.basis, self.iterations in place.
+
+        Returns:
+            SolveStatus indicating outcome (OPTIMAL, UNBOUNDED, ITERATION_LIMIT).
+        """
         for iteration in range(1, MAX_ITERATIONS + 1):
-            # Step 1: Compute basic variable values  x_B = B⁻¹ b
             x_B = self.B_inv @ self.b
 
-            # Step 2: Compute reduced costs for all non-basic variables
-            # c̄_j = c_j - c_B^T B⁻¹ a_j
+            # Pricing: find entering variable (Bland's rule)
             c_B = self.c_full[self.basis]
-            y = c_B @ self.B_inv  # dual variables (simplex multipliers)
+            y = c_B @ self.B_inv
 
-            # Find entering variable (Bland's rule: smallest index with negative reduced cost)
-            # For maximization: enter if reduced cost > 0 (can improve objective)
             entering_col = -1
             entering_rc = 0.0
             for j in range(self.N):
@@ -110,21 +118,17 @@ class RevisedSimplex:
                     continue
                 rc_j = self.c_full[j] - y @ self.A_full[:, j]
                 if rc_j > OPTIMALITY_TOL:
-                    # Bland's rule: take the first eligible variable by index
                     entering_col = j
                     entering_rc = rc_j
                     break
 
             if entering_col == -1:
-                # No improving variable → optimal
-                status = SolveStatus.OPTIMAL
-                break
+                return SolveStatus.OPTIMAL
 
-            # Step 3: Compute direction  d = B⁻¹ a_entering
-            a_entering = self.A_full[:, entering_col]
-            d = self.B_inv @ a_entering
+            # Direction
+            d = self.B_inv @ self.A_full[:, entering_col]
 
-            # Step 4: Minimum ratio test (Bland's rule for ties: smallest basis index)
+            # Ratio test (Bland's rule for ties)
             leaving_row = -1
             min_ratio = float('inf')
             for i in range(self.m):
@@ -134,30 +138,24 @@ class RevisedSimplex:
                         min_ratio = ratio
                         leaving_row = i
                     elif abs(ratio - min_ratio) <= PIVOT_TOL:
-                        # Bland's rule tie-breaking: prefer row with smaller basis index
                         if self.basis[i] < self.basis[leaving_row]:
                             leaving_row = i
 
             if leaving_row == -1:
-                status = SolveStatus.UNBOUNDED
-                break
+                return SolveStatus.UNBOUNDED
 
-            # Record snapshot before pivot
+            # Pivot
             leaving_col = self.basis[leaving_row]
             pivot_element = d[leaving_row]
-
-            # Step 5: Update B⁻¹ via elementary row operations
             self._update_basis_inverse(d, leaving_row)
-
-            # Update basis
             self.basis[leaving_row] = entering_col
 
-            # Compute new x_B and objective for snapshot
+            # Record snapshot
             x_B_new = self.B_inv @ self.b
             c_B_new = self.c_full[self.basis]
             obj_new = float(c_B_new @ x_B_new)
 
-            snapshot = IterationSnapshot(
+            self.iterations.append(IterationSnapshot(
                 iteration=iteration,
                 entering_var=self.all_var_names[entering_col],
                 leaving_var=self.all_var_names[leaving_col],
@@ -169,13 +167,9 @@ class RevisedSimplex:
                 entering_reduced_cost=entering_rc,
                 leaving_ratio=min_ratio,
                 basic_values=tuple(x_B_new),
-            )
-            self.iterations.append(snapshot)
-        else:
-            status = SolveStatus.ITERATION_LIMIT
+            ))
 
-        elapsed = time.perf_counter() - start_time
-        return self._make_state(status, elapsed)
+        return SolveStatus.ITERATION_LIMIT
 
     def _solve_with_bigm(self, start_time: float) -> SolveState:
         """Handle negative RHS via Big-M: negate rows with b_i < 0, add artificials.
@@ -231,72 +225,8 @@ class RevisedSimplex:
         except np.linalg.LinAlgError:
             return self._make_state(SolveStatus.INFEASIBLE, time.perf_counter() - start_time)
 
-        # Now solve normally
-        status = SolveStatus.OPTIMAL
-        for iteration in range(1, MAX_ITERATIONS + 1):
-            x_B = self.B_inv @ self.b
-            c_B = self.c_full[self.basis]
-            y = c_B @ self.B_inv
-
-            entering_col = -1
-            entering_rc = 0.0
-            for j in range(self.N):
-                if j in self.basis:
-                    continue
-                rc_j = self.c_full[j] - y @ self.A_full[:, j]
-                if rc_j > OPTIMALITY_TOL:
-                    entering_col = j
-                    entering_rc = rc_j
-                    break
-
-            if entering_col == -1:
-                status = SolveStatus.OPTIMAL
-                break
-
-            a_entering = self.A_full[:, entering_col]
-            d = self.B_inv @ a_entering
-
-            leaving_row = -1
-            min_ratio = float('inf')
-            for i in range(self.m):
-                if d[i] > PIVOT_TOL:
-                    ratio = x_B[i] / d[i]
-                    if ratio < min_ratio - PIVOT_TOL:
-                        min_ratio = ratio
-                        leaving_row = i
-                    elif abs(ratio - min_ratio) <= PIVOT_TOL:
-                        if self.basis[i] < self.basis[leaving_row]:
-                            leaving_row = i
-
-            if leaving_row == -1:
-                status = SolveStatus.UNBOUNDED
-                break
-
-            leaving_col = self.basis[leaving_row]
-            pivot_element = d[leaving_row]
-            self._update_basis_inverse(d, leaving_row)
-            self.basis[leaving_row] = entering_col
-
-            x_B_new = self.B_inv @ self.b
-            c_B_new = self.c_full[self.basis]
-            obj_new = float(c_B_new @ x_B_new)
-
-            snapshot = IterationSnapshot(
-                iteration=iteration,
-                entering_var=self.all_var_names[entering_col],
-                leaving_var=self.all_var_names[leaving_col],
-                pivot_row=leaving_row,
-                pivot_col=entering_col,
-                pivot_element=pivot_element,
-                objective_value=obj_new,
-                basic_variables=tuple(self.all_var_names[j] for j in self.basis),
-                entering_reduced_cost=entering_rc,
-                leaving_ratio=min_ratio,
-                basic_values=tuple(x_B_new),
-            )
-            self.iterations.append(snapshot)
-        else:
-            status = SolveStatus.ITERATION_LIMIT
+        # Run the shared simplex loop
+        status = self._simplex_loop()
 
         # Check if any artificial variable is still in the basis with nonzero value
         x_B_final = self.B_inv @ self.b
