@@ -47,7 +47,8 @@ class HiGHSBackend:
         for j in range(n):
             h.addVar(0.0, highspy.kHighsInf)
 
-        # Set objective (maximize)
+        # Always maximize: the LP parser negates c for minimize problems,
+        # so LPProblem.c is always in max-form by the time it reaches here.
         for j in range(n):
             h.changeColCost(j, float(problem.c[j]))
         h.changeObjectiveSense(highspy.ObjSense.kMaximize)
