@@ -130,7 +130,7 @@ def diff(old_file, new_file, engine, fmt, output):
         return
 
     decision = ImpactAnalyzer().analyze(old_state, change, old_problem)
-    result = Reoptimizer().reoptimize(old_state, new_problem, change, decision)
+    result = Reoptimizer().reoptimize(old_state, new_problem, change, decision, old_problem=old_problem)
     report = DiffReporter().diff(old_state, result.new_state, change, result)
 
     if fmt == "json":

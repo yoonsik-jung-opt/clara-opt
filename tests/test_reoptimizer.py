@@ -58,7 +58,7 @@ def full_pipeline(old_problem, new_problem, base_state):
     """Run detect → analyze → reoptimize."""
     change = ChangeDetector().detect(old_problem, new_problem)
     decision = ImpactAnalyzer().analyze(base_state, change, old_problem)
-    result = Reoptimizer().reoptimize(base_state, new_problem, change, decision)
+    result = Reoptimizer().reoptimize(base_state, new_problem, change, decision, old_problem=old_problem)
     return result, decision
 
 

@@ -59,7 +59,7 @@ def run_pipeline(old_problem, new_problem):
     old_state = RevisedSimplex(old_problem).solve()
     change = ChangeDetector().detect(old_problem, new_problem)
     decision = ImpactAnalyzer().analyze(old_state, change, old_problem)
-    result = Reoptimizer().reoptimize(old_state, new_problem, change, decision)
+    result = Reoptimizer().reoptimize(old_state, new_problem, change, decision, old_problem=old_problem)
     report = DiffReporter().diff(old_state, result.new_state, change, result)
     return report
 
