@@ -287,6 +287,7 @@ class ExplanationReport:
     variable: VariableReport
     sensitivity: SensitivityReport
     header: str
+    bnb: object = None  # Optional BnBReport (avoid circular import)
 
     def to_text(self, level: DetailLevel = DetailLevel.DETAILED) -> str:
         sep = "\u2550" * 60
@@ -295,21 +296,29 @@ class ExplanationReport:
             self.header,
             sep,
             "",
+        ]
+        if self.bnb is not None:
+            parts.append(self.bnb.to_text(level))
+            parts.append("")
+        parts.extend([
             self.binding.to_text(level),
             "",
             self.variable.to_text(level),
             "",
             self.sensitivity.to_text(level),
-        ]
+        ])
         return "\n".join(parts)
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "header": self.header,
             "binding_report": self.binding.to_dict(),
             "variable_report": self.variable.to_dict(),
             "sensitivity_report": self.sensitivity.to_dict(),
         }
+        if self.bnb is not None:
+            d["bnb_report"] = self.bnb.to_dict()
+        return d
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent)
