@@ -97,6 +97,50 @@ def info(file):
     click.echo("\n".join(lines))
 
 
+@main.command()
+@click.argument("old_file", type=click.Path(exists=True, dir_okay=False))
+@click.argument("new_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--engine", type=click.Choice(["internal", "highs"]),
+              default="internal")
+@click.option("--format", "fmt", type=click.Choice(["text", "json"]),
+              default="text")
+@click.option("--output", "-o", type=click.Path(), default=None)
+def diff(old_file, new_file, engine, fmt, output):
+    """Compare two LP problems and explain what changed.
+
+    Runs the full reoptimization pipeline:
+    detect -> analyze -> reoptimize -> diff report.
+    """
+    from clara.reopt.detector import ChangeDetector
+    from clara.reopt.analyzer import ImpactAnalyzer
+    from clara.reopt.reoptimizer import Reoptimizer
+    from clara.reopt.diff_report import DiffReporter
+
+    old_problem = _parse_file(old_file)
+    new_problem = _parse_file(new_file)
+
+    old_state = _solve(old_problem, engine)
+    if not old_state.is_optimal:
+        click.secho(f"Old problem is {old_state.status.name}.", fg="red", err=True)
+        sys.exit(1)
+
+    change = ChangeDetector().detect(old_problem, new_problem)
+    if change is None:
+        click.echo("No parameter changes detected. Solutions are identical.")
+        return
+
+    decision = ImpactAnalyzer().analyze(old_state, change, old_problem)
+    result = Reoptimizer().reoptimize(old_state, new_problem, change, decision, old_problem=old_problem)
+    report = DiffReporter().diff(old_state, result.new_state, change, result)
+
+    if fmt == "json":
+        text = report.to_json()
+    else:
+        text = report.to_text()
+
+    _write_output(text, output)
+
+
 @main.command(name="what-if", hidden=True)
 @click.argument("file", type=click.Path(exists=True, dir_okay=False))
 def what_if(file):
@@ -126,21 +170,7 @@ def _parse_file(filepath: str):
 
 
 def _solve(problem, engine_name: str):
-    """Solve with the selected engine."""
-    solver = _make_engine(engine_name)
-    state = solver.solve()
-    return state
-
-
-def _make_engine(engine_name: str):
-    """Factory for solve engines. Returns a solver instance (not yet solved)."""
-    # For now, we need the problem to create the solver.
-    # This is handled differently — _solve creates the engine with the problem.
-    raise NotImplementedError  # not used directly
-
-
-def _solve(problem, engine_name: str):
-    """Solve with the selected engine."""
+    """Solve with the selected engine. Auto-detects LP vs MIP for internal engine."""
     if engine_name == "highs":
         try:
             from clara.engine.highs_backend import HiGHSBackend
@@ -151,8 +181,12 @@ def _solve(problem, engine_name: str):
                 fg="yellow", err=True,
             )
 
-    solver = RevisedSimplex(problem)
-    return solver.solve()
+    # Auto-detect LP vs MIP
+    if problem.has_integers:
+        from clara.engine.bnb import InternalBnB
+        return InternalBnB().solve(problem)
+
+    return RevisedSimplex(problem).solve()
 
 
 def _format_solve_text(state) -> str:

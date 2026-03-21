@@ -658,6 +658,28 @@ class _LPParser:
             A = np.array(all_rows)
             b = np.array(all_rhs)
 
+        # Build bounds arrays
+        lower_bounds = np.zeros(n)
+        upper_bounds = np.full(n, np.inf)
+        for vname, (lo, hi) in self.bounds.items():
+            if vname in var_idx:
+                lower_bounds[var_idx[vname]] = lo
+                upper_bounds[var_idx[vname]] = hi
+
+        # Binary vars get [0, 1] bounds
+        binary_indices: set[int] = set()
+        for vname in self.binary_vars:
+            if vname in var_idx:
+                idx = var_idx[vname]
+                binary_indices.add(idx)
+                lower_bounds[idx] = 0.0
+                upper_bounds[idx] = 1.0
+
+        integer_indices: set[int] = set()
+        for vname in self.integer_vars:
+            if vname in var_idx:
+                integer_indices.add(var_idx[vname])
+
         return LPProblem(
             c=c,
             A=A,
@@ -665,6 +687,10 @@ class _LPParser:
             var_names=list(var_names),
             constraint_names=con_names,
             name=self.name,
+            lower_bounds=lower_bounds,
+            upper_bounds=upper_bounds,
+            integer_vars=integer_indices,
+            binary_vars=binary_indices,
         )
 
 

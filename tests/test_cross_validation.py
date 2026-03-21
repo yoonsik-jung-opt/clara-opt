@@ -114,3 +114,15 @@ class TestHiGHSStandalone:
         state = HiGHSBackend().solve(problem)
         d = state.to_dict()
         assert d["engine"] == "HIGHS"
+
+    def test_minimize_cross_validation(self):
+        """Minimize problem: Internal and HiGHS should agree.
+
+        Parser negates c for minimize, so both engines see a max problem.
+        """
+        problem = read_lp(FIXTURES / "minimize_small.lp")
+        internal = RevisedSimplex(problem).solve()
+        highs = HiGHSBackend().solve(problem)
+        assert abs(internal.optimal_value - highs.optimal_value) < TOL_OPTIMAL, (
+            f"Internal={internal.optimal_value}, HiGHS={highs.optimal_value}"
+        )
