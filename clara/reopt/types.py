@@ -169,27 +169,178 @@ class ReoptResult:
 
 
 # ============================================================
-# Solution diff output
+# Diff report structures
 # ============================================================
 
 @dataclass(frozen=True)
-class SolutionDiff:
-    """Comparison of two SolveStates — the "what changed and why" report.
+class VariableChange:
+    """Change in a single variable between old and new solution."""
+    name: str
+    old_value: float
+    new_value: float
+    delta: float
+    delta_pct: float
+    old_basis: "BasisStatus"
+    new_basis: "BasisStatus"
+    basis_changed: bool
 
-    Maps to XAIOR Actionability: tells the decision-maker what happened
-    to their solution and what they should do next.
-    """
-    state_old: SolveState
-    state_new: SolveState
+
+@dataclass(frozen=True)
+class ConstraintChange:
+    """Change in a single constraint between old and new solution."""
+    name: str
+    old_rhs: float
+    new_rhs: float
+    old_slack: float
+    new_slack: float
+    old_dual: float
+    new_dual: float
+    old_binding: bool
+    new_binding: bool
+    became_binding: bool
+    became_nonbinding: bool
+
+
+@dataclass
+class DiffReport:
+    """Complete comparison of two solutions."""
     change: ParameterChange
+    reopt_result: ReoptResult
 
-    objective_delta: float = 0.0
-    objective_delta_pct: float = 0.0
+    old_objective: float
+    new_objective: float
+    objective_delta: float
+    objective_delta_pct: float
 
-    basis_changed: bool = False
-    variables_entered: tuple[str, ...] = ()
-    variables_left: tuple[str, ...] = ()
-    binding_added: tuple[str, ...] = ()
-    binding_removed: tuple[str, ...] = ()
+    variable_changes: tuple[VariableChange, ...]
+    variables_entered_basis: tuple[str, ...]
+    variables_left_basis: tuple[str, ...]
 
-    variable_changes: tuple[tuple[str, float, float], ...] = ()
+    constraint_changes: tuple[ConstraintChange, ...]
+    became_binding: tuple[str, ...]
+    became_nonbinding: tuple[str, ...]
+
+    old_bottleneck: Optional[str]
+    new_bottleneck: Optional[str]
+    bottleneck_shifted: bool
+
+    summary: str
+
+    def to_text(self) -> str:
+        """Full text diff report."""
+        sep = "\u2550" * 60
+        lines = [sep, "CLARA \u2014 Solution Change Report", sep, ""]
+
+        # Parameter change
+        lines.append("PARAMETER CHANGE")
+        lines.append(f"  Type: {self.change.change_type.name}")
+        lines.append(f"  {self.change.summary}")
+        if self.change.delta_b is not None:
+            for i, d in enumerate(self.change.delta_b):
+                if abs(d) > 1e-10:
+                    lines.append(f"    delta_b[{i}] = {d:+.4f}")
+        if self.change.delta_c is not None:
+            for i, d in enumerate(self.change.delta_c):
+                if abs(d) > 1e-10:
+                    lines.append(f"    delta_c[{i}] = {d:+.4f}")
+        lines.append("")
+
+        # Reoptimization
+        lines.append("REOPTIMIZATION")
+        lines.append(f"  {self.reopt_result.summary}")
+        lines.append("")
+
+        # Objective
+        lines.append("OBJECTIVE")
+        sign = "+" if self.objective_delta >= 0 else ""
+        lines.append(
+            f"  Old: {self.old_objective:.4f} \u2192 New: {self.new_objective:.4f} "
+            f"({sign}{self.objective_delta:.4f}, {sign}{self.objective_delta_pct:.1f}%)"
+        )
+        lines.append("")
+
+        # Variable changes
+        lines.append("VARIABLE CHANGES")
+        if not self.variable_changes:
+            lines.append("  No significant variable changes.")
+        else:
+            for vc in self.variable_changes:
+                s = "+" if vc.delta >= 0 else ""
+                basis_note = ""
+                if vc.basis_changed:
+                    if vc.new_basis.name == "BASIC":
+                        basis_note = " \u2014 ENTERED basis"
+                    else:
+                        basis_note = " \u2014 LEFT basis"
+                lines.append(
+                    f"  {vc.name}: {vc.old_value:.4f} \u2192 {vc.new_value:.4f} "
+                    f"({s}{vc.delta:.4f}, {s}{vc.delta_pct:.1f}%){basis_note}"
+                )
+        lines.append("")
+
+        # Constraint changes
+        if self.became_binding or self.became_nonbinding:
+            lines.append("CONSTRAINT CHANGES")
+            for cc in self.constraint_changes:
+                if cc.became_binding:
+                    lines.append(f"  {cc.name}: non-binding \u2192 binding")
+                elif cc.became_nonbinding:
+                    lines.append(f"  {cc.name}: binding \u2192 non-binding")
+            lines.append("")
+
+        # Bottleneck
+        lines.append("BOTTLENECK SHIFT")
+        if self.bottleneck_shifted:
+            lines.append(f"  Old: {self.old_bottleneck} \u2192 New: {self.new_bottleneck}")
+        else:
+            lines.append(f"  Unchanged: {self.old_bottleneck or 'none'}")
+
+        return "\n".join(lines)
+
+    def to_dict(self) -> dict:
+        """JSON-serializable dict."""
+        return {
+            "change": {
+                "type": self.change.change_type.name,
+                "summary": self.change.summary,
+            },
+            "reoptimization": {
+                "method": self.reopt_result.method_used,
+                "pivots": self.reopt_result.pivots,
+                "basis_preserved": self.reopt_result.basis_preserved,
+                "time_seconds": self.reopt_result.reopt_time_seconds,
+            },
+            "objective": {
+                "old": self.old_objective,
+                "new": self.new_objective,
+                "delta": self.objective_delta,
+                "delta_pct": self.objective_delta_pct,
+            },
+            "variable_changes": [
+                {
+                    "name": vc.name, "old": vc.old_value, "new": vc.new_value,
+                    "delta": vc.delta, "delta_pct": vc.delta_pct,
+                    "basis_changed": vc.basis_changed,
+                }
+                for vc in self.variable_changes
+            ],
+            "constraint_changes": [
+                {
+                    "name": cc.name, "old_binding": cc.old_binding,
+                    "new_binding": cc.new_binding,
+                    "became_binding": cc.became_binding,
+                    "became_nonbinding": cc.became_nonbinding,
+                    "old_dual": cc.old_dual, "new_dual": cc.new_dual,
+                }
+                for cc in self.constraint_changes
+            ],
+            "bottleneck": {
+                "old": self.old_bottleneck,
+                "new": self.new_bottleneck,
+                "shifted": self.bottleneck_shifted,
+            },
+        }
+
+    def to_json(self, indent: int = 2) -> str:
+        import json
+        return json.dumps(self.to_dict(), indent=indent)

@@ -9,5 +9,7 @@ from clara.reopt.types import (
     ParameterChange,
     ReoptDecision,
     ReoptResult,
-    SolutionDiff,
+    ConstraintChange,
+    DiffReport,
+    VariableChange,
 )
