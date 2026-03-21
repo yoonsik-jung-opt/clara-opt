@@ -37,6 +37,7 @@ class Reoptimizer:
         new_problem: LPProblem,
         change: ParameterChange,
         decision: ReoptDecision,
+        old_problem: Optional[LPProblem] = None,
     ) -> ReoptResult:
         """Reoptimize the new problem using information from the old solution.
 
@@ -45,6 +46,7 @@ class Reoptimizer:
             new_problem: The modified LP problem.
             change: Detected parameter change.
             decision: Impact Analyzer's recommendation.
+            old_problem: Original problem (needed for parametric LP).
 
         Returns:
             ReoptResult with the new SolveState and metadata.
@@ -58,7 +60,7 @@ class Reoptimizer:
         elif method == "warm_start":
             return self._warm_start(old_state, new_problem, change)
         elif method == "parametric_lp":
-            return self._parametric_lp(old_state, new_problem, change)
+            return self._parametric_lp(old_state, new_problem, change, old_problem)
         else:
             return self._scratch(new_problem)
 
@@ -258,9 +260,27 @@ class Reoptimizer:
         old_state: SolveState,
         new_problem: LPProblem,
         change: ParameterChange,
+        old_problem: Optional[LPProblem] = None,
     ) -> ReoptResult:
-        """Parametric LP — placeholder, falls back to warm-start."""
-        return self._warm_start(old_state, new_problem, change)
+        """Parametric LP for Type RC compound changes."""
+        if old_state.basis_inverse is None or old_problem is None:
+            return self._scratch(new_problem)
+        if change.delta_b is None or change.delta_c is None:
+            return self._warm_start(old_state, new_problem, change)
+
+        from clara.reopt.parametric import ParametricLPSolver
+        param_result = ParametricLPSolver().solve(
+            old_state, old_problem, change.delta_b, change.delta_c
+        )
+
+        return ReoptResult(
+            new_state=param_result.new_state,
+            method_used="parametric_lp",
+            pivots=param_result.num_pivots,
+            scratch_estimate=old_state.iteration_count,
+            basis_preserved=(param_result.num_breakpoints == 0),
+            reopt_time_seconds=param_result.solve_time_seconds,
+        )
 
     def _extract_basis_indices(
         self,

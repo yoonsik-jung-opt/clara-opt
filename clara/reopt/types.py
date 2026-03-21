@@ -169,6 +169,49 @@ class ReoptResult:
 
 
 # ============================================================
+# Parametric LP structures
+# ============================================================
+
+@dataclass(frozen=True)
+class ParametricBreakpoint:
+    """A point where the basis changes along the parametric path."""
+    theta: float
+    breakpoint_type: str  # "primal" or "dual"
+    leaving_var: Optional[str]
+    entering_var: Optional[str]
+    objective_value: float
+    basic_variables: tuple[str, ...]
+    explanation: str
+
+
+@dataclass(frozen=True)
+class ParametricResult:
+    """Output of parametric LP solver."""
+    new_state: SolveState
+    breakpoints: tuple[ParametricBreakpoint, ...]
+    theta_start: float
+    theta_end: float
+    num_pivots: int
+    path_monotone: bool
+    solve_time_seconds: float
+
+    @property
+    def num_breakpoints(self) -> int:
+        return len(self.breakpoints)
+
+    @property
+    def summary(self) -> str:
+        if not self.breakpoints:
+            return ("No breakpoints — current basis is optimal for the entire "
+                    "parameter range [0, 1].")
+        return (
+            f"{self.num_breakpoints} breakpoint(s) found along θ ∈ [0, 1]. "
+            f"{self.num_pivots} pivot(s) performed. "
+            f"First structural change at θ = {self.breakpoints[0].theta:.4f}."
+        )
+
+
+# ============================================================
 # Diff report structures
 # ============================================================
 
