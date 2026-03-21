@@ -17,6 +17,11 @@ import numpy as np
 from clara.model.solve_state import SolveState
 
 
+class IncompatibleProblemsError(Exception):
+    """Raised when two problems cannot be meaningfully compared."""
+    pass
+
+
 # ============================================================
 # Change classification (Albici 2010)
 # ============================================================
@@ -37,6 +42,8 @@ class ChangeType(Enum):
     TYPE_X = auto()
     TYPE_M = auto()
     TYPE_RC = auto()
+    TYPE_A = auto()      # constraint matrix A changed (not just b or c)
+    TYPE_MULTI = auto()  # multiple structural changes
 
 
 # ============================================================
@@ -70,6 +77,29 @@ class ParameterChange:
         if self.delta_c is None:
             return None
         return float(np.max(np.abs(self.delta_c)))
+
+    @property
+    def summary(self) -> str:
+        """Human-readable one-line summary of the change."""
+        if self.change_type == ChangeType.TYPE_R:
+            n = int(np.sum(np.abs(self.delta_b) > 1e-10)) if self.delta_b is not None else 0
+            return f"RHS changed in {n} constraint(s)"
+        elif self.change_type == ChangeType.TYPE_C:
+            n = int(np.sum(np.abs(self.delta_c) > 1e-10)) if self.delta_c is not None else 0
+            return f"Objective coefficients changed for {n} variable(s)"
+        elif self.change_type == ChangeType.TYPE_RC:
+            return "Both RHS and objective coefficients changed (compound)"
+        elif self.change_type == ChangeType.TYPE_V:
+            return f"{len(self.new_columns)} new variable(s) added"
+        elif self.change_type == ChangeType.TYPE_X:
+            return f"{len(self.new_rows)} new constraint(s) added"
+        elif self.change_type == ChangeType.TYPE_M:
+            return f"{len(self.removed_rows)} constraint(s) removed"
+        elif self.change_type == ChangeType.TYPE_A:
+            return "Constraint matrix coefficients changed"
+        elif self.change_type == ChangeType.TYPE_MULTI:
+            return "Multiple structural changes"
+        return "Unknown change"
 
 
 # ============================================================
