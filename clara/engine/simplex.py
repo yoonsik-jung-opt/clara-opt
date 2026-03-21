@@ -83,6 +83,28 @@ class RevisedSimplex:
         # History
         self.iterations: list[IterationSnapshot] = []
 
+    @classmethod
+    def from_warm_start(
+        cls,
+        problem: LPProblem,
+        basis: list[int],
+        basis_inverse: np.ndarray,
+    ) -> "RevisedSimplex":
+        """Create a solver warm-started from an existing basis.
+
+        solve() will start from the given basis instead of the identity,
+        checking optimality and pivoting as needed.
+
+        Args:
+            problem: The (possibly modified) LP problem.
+            basis: List of m column indices forming the basis.
+            basis_inverse: The m×m B⁻¹ matrix from the previous solve.
+        """
+        solver = cls(problem)
+        solver.basis = list(basis)
+        solver.B_inv = basis_inverse.copy()
+        return solver
+
     def solve(self) -> SolveState:
         """Run Revised Simplex and return a SolveState."""
         start_time = time.perf_counter()
