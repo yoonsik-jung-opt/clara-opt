@@ -2,6 +2,7 @@
 
 from clara.reopt.analyzer import ImpactAnalyzer
 from clara.reopt.detector import ChangeDetector
+from clara.reopt.diff_report import DiffReporter
 from clara.reopt.reoptimizer import Reoptimizer
 from clara.reopt.types import (
     ChangeType,
@@ -9,5 +10,7 @@ from clara.reopt.types import (
     ParameterChange,
     ReoptDecision,
     ReoptResult,
-    SolutionDiff,
+    ConstraintChange,
+    DiffReport,
+    VariableChange,
 )

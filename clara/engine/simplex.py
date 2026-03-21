@@ -283,6 +283,101 @@ class RevisedSimplex:
         elapsed = time.perf_counter() - start_time
         return self._make_state(status, elapsed)
 
+    def solve_dual(self) -> SolveState:
+        """Run Dual Simplex from current (dual-feasible) basis.
+
+        Restores primal feasibility by pivoting out negative basic variables.
+        Precondition: reduced costs ≤ 0 for all non-basic vars (dual feasible).
+        """
+        start_time = time.perf_counter()
+        status = self._dual_simplex_loop()
+        elapsed = time.perf_counter() - start_time
+        return self._make_state(status, elapsed)
+
+    def _dual_simplex_loop(self) -> SolveStatus:
+        """Core dual simplex loop."""
+        for iteration in range(1, MAX_ITERATIONS + 1):
+            x_B = self.B_inv @ self.b
+
+            # Find leaving variable: most negative x_B (Bland's rule for ties)
+            leaving_row = -1
+            min_val = -PIVOT_TOL
+            for i in range(self.m):
+                if x_B[i] < min_val:
+                    min_val = x_B[i]
+                    leaving_row = i
+                elif leaving_row >= 0 and abs(x_B[i] - min_val) < PIVOT_TOL:
+                    if self.basis[i] < self.basis[leaving_row]:
+                        leaving_row = i
+
+            if leaving_row == -1:
+                return SolveStatus.OPTIMAL  # all x_B ≥ 0
+
+            # Compute reduced costs and pivot row
+            c_B = self.c_full[self.basis]
+            y = c_B @ self.B_inv
+            w = self.B_inv[leaving_row]  # pivot row of B⁻¹
+
+            # Ratio test for entering variable
+            entering_col = -1
+            min_ratio = float('inf')
+            for j in range(self.N):
+                if j in self.basis:
+                    continue
+                d_j = w @ self.A_full[:, j]
+                if d_j < -PIVOT_TOL:
+                    rc_j = self.c_full[j] - y @ self.A_full[:, j]
+                    ratio = rc_j / d_j
+                    if ratio < min_ratio - PIVOT_TOL:
+                        min_ratio = ratio
+                        entering_col = j
+                    elif abs(ratio - min_ratio) < PIVOT_TOL:
+                        if entering_col < 0 or j < entering_col:
+                            entering_col = j
+
+            if entering_col == -1:
+                return SolveStatus.INFEASIBLE  # dual unbounded
+
+            # Pivot
+            d = self.B_inv @ self.A_full[:, entering_col]
+            leaving_col = self.basis[leaving_row]
+            pivot_element = d[leaving_row]
+            self._update_basis_inverse(d, leaving_row)
+            self.basis[leaving_row] = entering_col
+
+            # Record snapshot
+            x_B_new = self.B_inv @ self.b
+            c_B_new = self.c_full[self.basis]
+            obj_new = float(c_B_new @ x_B_new)
+
+            self.iterations.append(IterationSnapshot(
+                iteration=iteration,
+                entering_var=self.all_var_names[entering_col],
+                leaving_var=self.all_var_names[leaving_col],
+                pivot_row=leaving_row,
+                pivot_col=entering_col,
+                pivot_element=pivot_element,
+                objective_value=obj_new,
+                basic_variables=tuple(self.all_var_names[j] for j in self.basis),
+                entering_reduced_cost=min_ratio,
+                leaving_ratio=min_val,
+                basic_values=tuple(x_B_new),
+            ))
+
+        return SolveStatus.ITERATION_LIMIT
+
+    def _is_dual_feasible(self) -> bool:
+        """Check if current basis is dual feasible (all rc ≤ 0 for max)."""
+        c_B = self.c_full[self.basis]
+        y = c_B @ self.B_inv
+        for j in range(self.N):
+            if j in self.basis:
+                continue
+            rc_j = self.c_full[j] - y @ self.A_full[:, j]
+            if rc_j > OPTIMALITY_TOL:
+                return False
+        return True
+
     def _update_basis_inverse(self, d: np.ndarray, pivot_row: int) -> None:
         """Update B⁻¹ using elementary row operations (product form).
 

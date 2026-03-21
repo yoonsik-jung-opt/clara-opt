@@ -97,6 +97,50 @@ def info(file):
     click.echo("\n".join(lines))
 
 
+@main.command()
+@click.argument("old_file", type=click.Path(exists=True, dir_okay=False))
+@click.argument("new_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--engine", type=click.Choice(["internal", "highs"]),
+              default="internal")
+@click.option("--format", "fmt", type=click.Choice(["text", "json"]),
+              default="text")
+@click.option("--output", "-o", type=click.Path(), default=None)
+def diff(old_file, new_file, engine, fmt, output):
+    """Compare two LP problems and explain what changed.
+
+    Runs the full reoptimization pipeline:
+    detect -> analyze -> reoptimize -> diff report.
+    """
+    from clara.reopt.detector import ChangeDetector
+    from clara.reopt.analyzer import ImpactAnalyzer
+    from clara.reopt.reoptimizer import Reoptimizer
+    from clara.reopt.diff_report import DiffReporter
+
+    old_problem = _parse_file(old_file)
+    new_problem = _parse_file(new_file)
+
+    old_state = _solve(old_problem, engine)
+    if not old_state.is_optimal:
+        click.secho(f"Old problem is {old_state.status.name}.", fg="red", err=True)
+        sys.exit(1)
+
+    change = ChangeDetector().detect(old_problem, new_problem)
+    if change is None:
+        click.echo("No parameter changes detected. Solutions are identical.")
+        return
+
+    decision = ImpactAnalyzer().analyze(old_state, change, old_problem)
+    result = Reoptimizer().reoptimize(old_state, new_problem, change, decision)
+    report = DiffReporter().diff(old_state, result.new_state, change, result)
+
+    if fmt == "json":
+        text = report.to_json()
+    else:
+        text = report.to_text()
+
+    _write_output(text, output)
+
+
 @main.command(name="what-if", hidden=True)
 @click.argument("file", type=click.Path(exists=True, dir_okay=False))
 def what_if(file):
