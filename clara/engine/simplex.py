@@ -87,9 +87,9 @@ class RevisedSimplex:
         """Run Revised Simplex and return a SolveState."""
         start_time = time.perf_counter()
 
-        # Check initial feasibility (b >= 0 required for standard form)
+        # Handle negative RHS via Big-M Phase I
         if np.any(self.b < -PIVOT_TOL):
-            return self._make_state(SolveStatus.INFEASIBLE, time.perf_counter() - start_time)
+            return self._solve_with_bigm(start_time)
 
         status = SolveStatus.OPTIMAL
         for iteration in range(1, MAX_ITERATIONS + 1):
@@ -173,6 +173,160 @@ class RevisedSimplex:
             self.iterations.append(snapshot)
         else:
             status = SolveStatus.ITERATION_LIMIT
+
+        elapsed = time.perf_counter() - start_time
+        return self._make_state(status, elapsed)
+
+    def _solve_with_bigm(self, start_time: float) -> SolveState:
+        """Handle negative RHS via Big-M: negate rows with b_i < 0, add artificials.
+
+        For rows where b_i < 0, multiply the entire row by -1 (flips <= to >=,
+        then slack is negative). We add an artificial variable for these rows.
+        """
+        BIG_M = 1e6
+        neg_rows = [i for i in range(self.m) if self.b[i] < -PIVOT_TOL]
+
+        # Negate rows with negative RHS so all b >= 0
+        for i in neg_rows:
+            self.A_full[i] *= -1
+            self.b[i] *= -1
+
+        # For negated rows, the slack variable starts negative (wrong sign).
+        # We need artificial variables for these rows.
+        n_art = len(neg_rows)
+        if n_art == 0:
+            # Shouldn't happen, but just in case
+            return self._make_state(SolveStatus.INFEASIBLE, time.perf_counter() - start_time)
+
+        # Extend the system with artificial variables
+        old_N = self.N
+        self.N += n_art
+        self.all_var_names.extend([f"_art{k}" for k in range(n_art)])
+
+        # Extend c_full: artificials get -BIG_M penalty (for max)
+        c_ext = np.zeros(self.N)
+        c_ext[:old_N] = self.c_full
+        for k in range(n_art):
+            c_ext[old_N + k] = -BIG_M
+        self.c_full = c_ext
+
+        # Extend A_full with artificial columns
+        art_cols = np.zeros((self.m, n_art))
+        for k, i in enumerate(neg_rows):
+            art_cols[i, k] = 1.0
+        self.A_full = np.hstack([self.A_full, art_cols])
+
+        # Fix basis: for negated rows, replace slack with artificial
+        # The slack for row i is at index (self.n + i) in the original system.
+        # After negation, that slack has coefficient -1 (wrong sign).
+        # The artificial has coefficient +1 (correct).
+        for k, i in enumerate(neg_rows):
+            self.basis[i] = old_N + k
+
+        # Reset B_inv since basis changed
+        # Extract basis matrix and compute inverse
+        B = np.column_stack([self.A_full[:, j] for j in self.basis])
+        try:
+            self.B_inv = np.linalg.inv(B)
+        except np.linalg.LinAlgError:
+            return self._make_state(SolveStatus.INFEASIBLE, time.perf_counter() - start_time)
+
+        # Now solve normally
+        status = SolveStatus.OPTIMAL
+        for iteration in range(1, MAX_ITERATIONS + 1):
+            x_B = self.B_inv @ self.b
+            c_B = self.c_full[self.basis]
+            y = c_B @ self.B_inv
+
+            entering_col = -1
+            entering_rc = 0.0
+            for j in range(self.N):
+                if j in self.basis:
+                    continue
+                rc_j = self.c_full[j] - y @ self.A_full[:, j]
+                if rc_j > OPTIMALITY_TOL:
+                    entering_col = j
+                    entering_rc = rc_j
+                    break
+
+            if entering_col == -1:
+                status = SolveStatus.OPTIMAL
+                break
+
+            a_entering = self.A_full[:, entering_col]
+            d = self.B_inv @ a_entering
+
+            leaving_row = -1
+            min_ratio = float('inf')
+            for i in range(self.m):
+                if d[i] > PIVOT_TOL:
+                    ratio = x_B[i] / d[i]
+                    if ratio < min_ratio - PIVOT_TOL:
+                        min_ratio = ratio
+                        leaving_row = i
+                    elif abs(ratio - min_ratio) <= PIVOT_TOL:
+                        if self.basis[i] < self.basis[leaving_row]:
+                            leaving_row = i
+
+            if leaving_row == -1:
+                status = SolveStatus.UNBOUNDED
+                break
+
+            leaving_col = self.basis[leaving_row]
+            pivot_element = d[leaving_row]
+            self._update_basis_inverse(d, leaving_row)
+            self.basis[leaving_row] = entering_col
+
+            x_B_new = self.B_inv @ self.b
+            c_B_new = self.c_full[self.basis]
+            obj_new = float(c_B_new @ x_B_new)
+
+            snapshot = IterationSnapshot(
+                iteration=iteration,
+                entering_var=self.all_var_names[entering_col],
+                leaving_var=self.all_var_names[leaving_col],
+                pivot_row=leaving_row,
+                pivot_col=entering_col,
+                pivot_element=pivot_element,
+                objective_value=obj_new,
+                basic_variables=tuple(self.all_var_names[j] for j in self.basis),
+                entering_reduced_cost=entering_rc,
+                leaving_ratio=min_ratio,
+                basic_values=tuple(x_B_new),
+            )
+            self.iterations.append(snapshot)
+        else:
+            status = SolveStatus.ITERATION_LIMIT
+
+        # Check if any artificial variable is still in the basis with nonzero value
+        x_B_final = self.B_inv @ self.b
+        for i, j in enumerate(self.basis):
+            if j >= old_N and abs(x_B_final[i]) > PIVOT_TOL:
+                # Artificial still active → infeasible
+                elapsed = time.perf_counter() - start_time
+                return self._make_state(SolveStatus.INFEASIBLE, elapsed)
+
+        # Remove artificials from system for clean state output
+        # Replace any artificial still in basis (at zero) with a slack
+        for i, j in enumerate(self.basis):
+            if j >= old_N:
+                # Find a slack not in basis to swap in
+                for s in range(self.n, self.n + self.m):
+                    if s not in self.basis:
+                        self.basis[i] = s
+                        break
+
+        self.N = old_N
+        self.c_full = self.c_full[:old_N]
+        self.A_full = self.A_full[:, :old_N]
+        self.all_var_names = self.all_var_names[:old_N]
+
+        # Recompute B_inv for the clean basis
+        B = np.column_stack([self.A_full[:, j] for j in self.basis])
+        try:
+            self.B_inv = np.linalg.inv(B)
+        except np.linalg.LinAlgError:
+            pass  # keep existing B_inv
 
         elapsed = time.perf_counter() - start_time
         return self._make_state(status, elapsed)
