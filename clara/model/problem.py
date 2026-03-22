@@ -25,6 +25,7 @@ class LPProblem:
     var_names: list[str] = field(default_factory=list)
     constraint_names: list[str] = field(default_factory=list)
     name: str = ""
+    sense: str = "maximize"  # "maximize" or "minimize"
     lower_bounds: np.ndarray | None = None
     upper_bounds: np.ndarray | None = None
     integer_vars: set[int] = field(default_factory=set)
