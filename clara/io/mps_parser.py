@@ -74,7 +74,7 @@ class _MPSParser:
 
             # Section headers start in column 1 (no leading space)
             if line and not line[0].isspace():
-                token = line.strip().upper()
+                token = line.split()[0].upper() if line.split() else ""
                 if token == "NAME":
                     parts = line.split(None, 1)
                     if len(parts) > 1:
