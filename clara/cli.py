@@ -161,7 +161,15 @@ def watch(file, params):
 # ============================================================
 
 def _parse_file(filepath: str):
-    """Parse LP file with user-friendly error handling."""
+    """Parse LP or MPS file with user-friendly error handling."""
+    p = Path(filepath)
+    if p.suffix.lower() == ".mps":
+        from clara.io.mps_parser import read_mps, MPSParseError
+        try:
+            return read_mps(filepath)
+        except MPSParseError as e:
+            click.secho(f"MPS parse error: {e}", fg="red", err=True)
+            sys.exit(1)
     try:
         return read_lp(filepath)
     except LPParseError as e:
