@@ -55,13 +55,13 @@ def solve_highs_mps(mps_path):
     return opt, elapsed, iters
 
 
-def solve_internal_lp(lp_path):
-    """Solve LP file using CLARA's Internal Simplex."""
+def solve_internal_mps(mps_path):
+    """Solve MPS file using CLARA's MPS parser + Internal Simplex."""
     try:
-        from clara.io.lp_parser import read_lp
+        from clara.io.mps_parser import read_mps
         from clara.engine.simplex import RevisedSimplex
 
-        problem = read_lp(lp_path)
+        problem = read_mps(mps_path)
         if problem.num_variables == 0:
             return None, 0, 0, "parser: 0 vars"
 
@@ -72,10 +72,7 @@ def solve_internal_lp(lp_path):
         if not state.is_optimal:
             return None, elapsed, 0, f"status: {state.status.name}"
 
-        # Internal Simplex maximizes; parser negates c for minimize
-        # So optimal_value is the negated min value
-        opt = -state.optimal_value  # convert back to min
-        return opt, elapsed, state.iteration_count, "OK"
+        return state.optimal_value, elapsed, state.iteration_count, "OK"
     except Exception as e:
         return None, 0, 0, str(e)[:50]
 
@@ -108,10 +105,8 @@ def main():
         n_vars = h.getNumCol()
         n_cons = h.getNumRow()
 
-        # Internal Simplex solve
-        i_opt, i_time, i_iters, note = None, 0, 0, "no LP"
-        if lp_file.exists():
-            i_opt, i_time, i_iters, note = solve_internal_lp(lp_file)
+        # Internal Simplex solve (via MPS parser directly)
+        i_opt, i_time, i_iters, note = solve_internal_mps(mps_file)
 
         # Compare
         match = ""
