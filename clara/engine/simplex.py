@@ -65,8 +65,12 @@ class RevisedSimplex:
         ]
 
         # Objective: decision vars have cost c_j, slacks have cost 0
+        # For minimize: negate c internally (simplex always maximizes)
         self.c_full = np.zeros(self.N)
-        self.c_full[:n] = problem.c
+        if problem.sense == "minimize":
+            self.c_full[:n] = -problem.c
+        else:
+            self.c_full[:n] = problem.c
 
         # Constraint matrix: [A | I]
         self.A_full = np.hstack([problem.A, np.eye(m)])
@@ -419,8 +423,10 @@ class RevisedSimplex:
         for i, j in enumerate(self.basis):
             x_full[j] = x_B[i]
 
-        # Optimal value
+        # Optimal value (un-negate for minimize problems)
         optimal_value = float(self.c_full @ x_full)
+        if self.problem.sense == "minimize":
+            optimal_value = -optimal_value
 
         # Dual variables (shadow prices): y = c_B^T B⁻¹
         c_B = self.c_full[self.basis]
