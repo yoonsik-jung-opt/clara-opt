@@ -1,0 +1,6 @@
+scenario,change_type,method,pivots,scratch_pivots,speedup,optimal,expected,match
+base→b1,TYPE_R,warm_start,0,3,∞,3677.7777777777783,3677.777777777778,✓
+base→b2,TYPE_R,warm_start_dual,1,3,3.0x,4300.0,4300.0,✓
+base→cost,TYPE_C,warm_start,1,2,2.0x,8266.666666666666,8266.666666666666,✓
+base→columns,TYPE_V,scratch,5,5,1.0x,3744.4444444444434,3744.4444444444443,✓
+compound (RC),TYPE_RC,parametric_lp,2,2,1.0x,10000.0,10000.0,✓
