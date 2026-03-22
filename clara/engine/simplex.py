@@ -54,10 +54,16 @@ class RevisedSimplex:
 
     def __init__(self, problem: LPProblem) -> None:
         self.problem = problem
-        m, n = problem.A.shape
-        self.m = m  # number of constraints
-        self.n = n  # number of decision variables
-        self.N = n + m  # total variables (decision + slack)
+
+        # Add upper bound constraints for finite upper bounds
+        # (simplex only handles Ax <= b, x >= 0 natively)
+        A, b, con_names = self._add_upper_bound_rows(problem)
+
+        m = A.shape[0]
+        n = problem.A.shape[1]
+        self.m = m
+        self.n = n
+        self.N = n + m
 
         # Full variable names: x1..xn, y1..ym (slacks)
         self.all_var_names = list(problem.var_names) + [
@@ -73,10 +79,10 @@ class RevisedSimplex:
             self.c_full[:n] = problem.c
 
         # Constraint matrix: [A | I]
-        self.A_full = np.hstack([problem.A, np.eye(m)])
+        self.A_full = np.hstack([A, np.eye(m)])
 
         # RHS
-        self.b = problem.b.copy()
+        self.b = b.copy()
 
         # Initial basis: slack variables (indices n, n+1, ..., n+m-1)
         self.basis = list(range(n, n + m))
@@ -86,6 +92,34 @@ class RevisedSimplex:
 
         # History
         self.iterations: list[IterationSnapshot] = []
+
+    @staticmethod
+    def _add_upper_bound_rows(problem: LPProblem):
+        """Add x_j <= ub as explicit constraints for finite upper bounds."""
+        n = problem.A.shape[1]
+        extra_rows = []
+        extra_rhs = []
+        extra_names = []
+        if problem.upper_bounds is not None:
+            for j in range(n):
+                ub = problem.upper_bounds[j]
+                if np.isfinite(ub):
+                    row = np.zeros(n)
+                    row[j] = 1.0
+                    extra_rows.append(row)
+                    extra_rhs.append(ub)
+                    extra_names.append(f"ub_{problem.var_names[j]}")
+
+        if extra_rows:
+            A = np.vstack([problem.A] + extra_rows)
+            b = np.concatenate([problem.b, extra_rhs])
+            names = list(problem.constraint_names) + extra_names
+        else:
+            A = problem.A
+            b = problem.b
+            names = list(problem.constraint_names)
+
+        return A, b, names
 
     @classmethod
     def from_warm_start(
@@ -126,9 +160,6 @@ class RevisedSimplex:
 
         Performs pricing, ratio test, pivot, and records IterationSnapshots.
         Modifies self.B_inv, self.basis, self.iterations in place.
-
-        Returns:
-            SolveStatus indicating outcome (OPTIMAL, UNBOUNDED, ITERATION_LIMIT).
         """
         for iteration in range(1, MAX_ITERATIONS + 1):
             x_B = self.B_inv @ self.b
@@ -457,14 +488,15 @@ class RevisedSimplex:
                 obj_coeff_range=obj_ranges.get(var_name, (float('-inf'), float('inf'))),
             ))
 
-        # Build ConstraintInfo
+        # Build ConstraintInfo (only original constraints, not upper bound rows)
+        orig_m = self.problem.num_constraints
         constraints = []
-        for i in range(m):
+        for i in range(orig_m):
             con_name = self.problem.constraint_names[i]
             slack_val = float(x_full[n + i])
             constraints.append(ConstraintInfo(
                 name=con_name,
-                rhs=float(self.problem.b[i]),
+                rhs=float(self.problem.b[i]) if i < len(self.problem.b) else 0.0,
                 slack=slack_val,
                 dual_value=float(y[i]),
                 is_binding=abs(slack_val) < OPTIMALITY_TOL,
@@ -567,7 +599,8 @@ class RevisedSimplex:
         x_B = self.B_inv @ self.b
         ranges: dict[str, tuple[float, float]] = {}
 
-        for i in range(self.m):
+        orig_m = len(self.problem.constraint_names)
+        for i in range(min(self.m, orig_m)):
             con_name = self.problem.constraint_names[i]
             col = self.B_inv[:, i]  # i-th column of B⁻¹
 
