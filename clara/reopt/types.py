@@ -456,7 +456,7 @@ class DiffReport:
 
     def to_dict(self) -> dict:
         """JSON-serializable dict."""
-        return {
+        d = {
             "change": {
                 "type": self.change.change_type.name,
                 "summary": self.change.summary,
