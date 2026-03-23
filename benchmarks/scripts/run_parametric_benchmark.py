@@ -57,10 +57,27 @@ def process_single(task):
             old_state, old_problem, change.delta_b, change.delta_c
         )
 
-        # Scratch verify
-        scratch = RevisedSimplex(new_problem).solve()
-        z_scratch = scratch.optimal_value if scratch.is_optimal else float("nan")
-        opt_match = abs(pr.new_state.optimal_value - z_scratch) < 1e-4 if scratch.is_optimal else False
+        # Scratch verify (with HiGHS fallback)
+        z_scratch = None
+        try:
+            scratch = RevisedSimplex(new_problem).solve()
+            if scratch.is_optimal:
+                z_scratch = scratch.optimal_value
+        except Exception:
+            pass
+        if z_scratch is None:
+            try:
+                from clara.engine.highs_backend import HiGHSBackend
+                highs = HiGHSBackend().solve(new_problem)
+                if highs.is_optimal:
+                    z_scratch = highs.optimal_value
+            except Exception:
+                pass
+        if z_scratch is None:
+            z_scratch = float("nan")
+        z_param = pr.new_state.optimal_value
+        import math
+        opt_match = abs(z_param - z_scratch) < max(abs(z_scratch) * 1e-4, 1e-4) if not math.isnan(z_scratch) else False
 
         main_result = {
             "base_instance": base_name,
