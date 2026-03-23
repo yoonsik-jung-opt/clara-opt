@@ -137,11 +137,126 @@ def gen_decision_fig():
     print(f"  {out.name}")
 
 
+def gen_attribution_fig():
+    """Stacked bar chart: attribution decomposition."""
+    rows = _read_csv("exp7_attribution.csv")
+    if not rows:
+        return
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        return
+
+    # Pick up to 5 representative instances
+    sample = rows[:5]
+    names = [r["base_instance"][:12] for r in sample]
+    rhs = [float(r["rhs_effect"]) for r in sample]
+    obj = [float(r["obj_effect"]) for r in sample]
+    inter = [float(r["interaction_effect"]) for r in sample]
+
+    fig, ax = plt.subplots(figsize=(3.4, 2.5))
+    x = np.arange(len(names))
+    ax.bar(x, rhs, label="RHS", color="steelblue")
+    ax.bar(x, obj, bottom=rhs, label="Obj", color="indianred")
+    bottoms = [r + o for r, o in zip(rhs, obj)]
+    ax.bar(x, inter, bottom=bottoms, label="Interaction", color="gray")
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, fontsize=6, rotation=45, ha="right")
+    ax.set_ylabel(r"$\Delta z$ contribution")
+    ax.legend(fontsize=6)
+    fig.tight_layout()
+
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    out = FIGURES_DIR / "exp7_attribution.pdf"
+    fig.savefig(out, dpi=150)
+    plt.close()
+    print(f"  {out.name}")
+
+
+def gen_region_projection_fig():
+    """2D projection of Albici sensitivity region."""
+    import json
+    proj_file = RESULTS_DIR / "exp8_albici_projections.json"
+    if not proj_file.exists():
+        return
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Polygon
+    except ImportError:
+        return
+
+    with open(proj_file) as f:
+        proj = json.load(f)
+
+    for key, verts in proj.items():
+        if not verts:
+            continue
+        fig, ax = plt.subplots(figsize=(3.4, 3.0))
+        xs, ys = zip(*verts)
+        poly = Polygon(verts, closed=True, alpha=0.3, color="steelblue", label="Simultaneous")
+        ax.add_patch(poly)
+        ax.plot(xs + (xs[0],), ys + (ys[0],), "b-", linewidth=0.5)
+        ax.plot(0, 0, "ko", markersize=4, label="Current")
+        ax.set_xlabel(f"Δb[{key.split('_')[0]}]")
+        ax.set_ylabel(f"Δb[{key.split('_')[1]}]")
+        ax.legend(fontsize=7)
+        ax.grid(True, alpha=0.3)
+        ax.set_aspect("equal")
+        fig.tight_layout()
+
+        FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+        out = FIGURES_DIR / f"exp8_region_{key}.pdf"
+        fig.savefig(out, dpi=150)
+        plt.close()
+        print(f"  {out.name}")
+        break  # just one projection
+
+
+def gen_region_histogram_fig():
+    """Histogram of simultaneity ratios."""
+    rows = _read_csv("exp8_region.csv")
+    if not rows:
+        return
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        return
+
+    ratios = [float(r["simultaneity_ratio"]) for r in rows if float(r["simultaneity_ratio"]) < 1e6]
+    if not ratios:
+        return
+
+    fig, ax = plt.subplots(figsize=(3.4, 2.5))
+    ax.hist(ratios, bins=20, color="steelblue", edgecolor="white")
+    ax.axvline(np.mean(ratios), color="red", linestyle="--", label=f"Mean={np.mean(ratios):.2f}")
+    ax.set_xlabel("Simultaneity ratio")
+    ax.set_ylabel("Count")
+    ax.legend(fontsize=7)
+    fig.tight_layout()
+
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    out = FIGURES_DIR / "exp8_ratio_histogram.pdf"
+    fig.savefig(out, dpi=150)
+    plt.close()
+    print(f"  {out.name}")
+
+
 def main():
     print("Generating figures:")
     gen_scalability_fig()
     gen_warmstart_fig()
     gen_decision_fig()
+    gen_attribution_fig()
+    gen_region_projection_fig()
+    gen_region_histogram_fig()
     print("Done.")
 
 
