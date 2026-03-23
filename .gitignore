@@ -65,7 +65,7 @@ benchmarks/results/*
 
 # Generated benchmark instances (reproducible via scripts)
 benchmarks/instances/random/*.lp
-benchmarks/instances/perturbations/
+benchmarks/instances/perturbations/**/*.lp
 
 # OS
 .DS_Store
