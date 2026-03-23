@@ -124,6 +124,15 @@ def write_perturbed_lp(filepath, problem, new_c, new_b, name):
                     f.write(f"{sign}{problem.A[i, j]:.6f} {var_names[j]}")
                     first = False
             f.write(f" <= {new_b[i]:.6f}\n")
+        # Preserve upper bounds from base problem
+        if problem.upper_bounds is not None:
+            has_finite = any(np.isfinite(problem.upper_bounds[j]) for j in range(n))
+            if has_finite:
+                f.write("\nBounds\n")
+                for j in range(n):
+                    ub = problem.upper_bounds[j]
+                    if np.isfinite(ub):
+                        f.write(f" 0 <= {var_names[j]} <= {ub:.6f}\n")
         f.write("\nEnd\n")
 
 
