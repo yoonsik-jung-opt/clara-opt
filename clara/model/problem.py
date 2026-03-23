@@ -61,3 +61,15 @@ class LPProblem:
     @property
     def has_integers(self) -> bool:
         return bool(self.integer_vars or self.binary_vars)
+
+    def as_lp(self) -> "LPProblem":
+        """Return a copy with integrality constraints removed (LP relaxation)."""
+        return LPProblem(
+            c=self.c.copy(), A=self.A.copy(), b=self.b.copy(),
+            var_names=list(self.var_names),
+            constraint_names=list(self.constraint_names),
+            name=self.name, sense=self.sense,
+            lower_bounds=self.lower_bounds.copy() if self.lower_bounds is not None else None,
+            upper_bounds=self.upper_bounds.copy() if self.upper_bounds is not None else None,
+            integer_vars=set(), binary_vars=set(),
+        )
