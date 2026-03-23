@@ -72,14 +72,18 @@ class ChangeAttributor:
         interaction = 0.0
         if old_state.basis_inverse is not None and np.any(delta_b != 0) and np.any(delta_c != 0):
             B_inv = old_state.basis_inverse
-            # Get basis indices
+            m_aug = B_inv.shape[0]
+            # Pad delta_b to augmented dimensions (UB rows have delta=0)
+            delta_b_aug = np.zeros(m_aug)
+            delta_b_aug[:len(delta_b)] = delta_b
+
             basis_decision = [j for j, v in enumerate(old_state.variables[:n])
                               if v.basis_status.name == "BASIC"]
-            dc_B = np.zeros(B_inv.shape[0])
+            dc_B = np.zeros(m_aug)
             for k, j in enumerate(basis_decision):
-                if k < len(dc_B) and j < n:
+                if k < m_aug and j < n:
                     dc_B[k] = delta_c_internal[j]
-            interaction = float(dc_B @ (B_inv @ delta_b[:B_inv.shape[0]]))
+            interaction = float(dc_B @ (B_inv @ delta_b_aug))
             if old_problem.sense == "minimize":
                 interaction = -interaction
 

@@ -125,23 +125,24 @@ class SimultaneousRegionAnalyzer:
         Simplified: for each row i of B⁻¹, the change in x_B[i] must keep it ≥ 0.
         """
         B_inv = state.basis_inverse
-        m_basis = B_inv.shape[0]
+        m_aug = B_inv.shape[0]
         n = problem.num_variables
         m = problem.num_constraints
 
-        x_B = B_inv @ problem.b[:m_basis]
+        # Pad b to augmented dimensions (UB rows have their own RHS)
+        from clara.engine.simplex import RevisedSimplex
+        _, b_aug, _ = RevisedSimplex._add_upper_bound_rows(problem)
+        x_B = B_inv @ b_aug
 
-        # Parameter vector: [Δb₁..Δbₘ_basis]
-        # (Simplified: only RHS perturbations for the polyhedron)
-        # Full version would include Δc but that requires dual feasibility rows
-        dim = min(m, m_basis)
+        # Parameter vector: δ = [Δb₁..Δbₘ] (original constraints only)
+        # Use B_inv[:, :m] since UB constraint RHS doesn't change
+        dim = m
 
         rows_H = []
         rows_h = []
 
-        # Primal feasibility: B⁻¹ @ (b + Δb) ≥ 0
-        # → -B⁻¹ @ Δb ≤ x_B
-        for i in range(m_basis):
+        # Primal feasibility: B⁻¹[:, :m] @ Δb ≤ x_B (for non-negativity)
+        for i in range(m_aug):
             row = np.zeros(dim)
             for j in range(dim):
                 row[j] = -B_inv[i, j]
