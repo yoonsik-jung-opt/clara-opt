@@ -158,6 +158,77 @@ def gen_exp6():
     _write_tex("exp6_scalability.tex", lines)
 
 
+def gen_exp7():
+    """Attribution by perturbation magnitude."""
+    rows = _read_csv("exp7_attribution.csv")
+    if not rows:
+        return
+    import numpy as np
+
+    by_pert = {}
+    for r in rows:
+        p = r["perturbation"]
+        by_pert.setdefault(p, []).append(r)
+
+    lines = [
+        r"\begin{table}[t]", r"\centering",
+        r"\caption{Objective change attribution by perturbation type.}",
+        r"\label{tab:attribution}",
+        r"\begin{tabular}{lrrrrl}", r"\toprule",
+        r"Perturbation & $n$ & RHS\% & Obj\% & Inter\% & Basis \\", r"\midrule",
+    ]
+    for p in ["RC_small", "RC_medium", "RC_large", "RC_asym_bc", "RC_asym_cb"]:
+        if p not in by_pert:
+            continue
+        rr = by_pert[p]
+        rhs = np.mean([float(r["rhs_pct"]) for r in rr])
+        obj = np.mean([float(r["obj_pct"]) for r in rr])
+        inter = np.mean([float(r["interaction_pct"]) for r in rr])
+        bp = sum(1 for r in rr if r["basis_preserved"] == "True")
+        lines.append(f"  {p.replace('_', r'\\_')} & {len(rr)} & {rhs:.1f} & {obj:.1f} "
+                     f"& {inter:.1f} & {bp}/{len(rr)} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
+    _write_tex("exp7_attribution.tex", lines)
+
+
+def gen_exp8():
+    """Simultaneous vs one-at-a-time sensitivity."""
+    rows = _read_csv("exp8_region.csv")
+    if not rows:
+        return
+    import numpy as np
+
+    groups = {"small": [], "medium": [], "large": [], "xlarge": []}
+    for r in rows:
+        n = int(r["n_vars"])
+        if n <= 20:
+            groups["small"].append(r)
+        elif n <= 50:
+            groups["medium"].append(r)
+        elif n <= 100:
+            groups["large"].append(r)
+        else:
+            groups["xlarge"].append(r)
+
+    lines = [
+        r"\begin{table}[t]", r"\centering",
+        r"\caption{Simultaneous vs.\ one-at-a-time sensitivity by problem size.}",
+        r"\label{tab:region}",
+        r"\begin{tabular}{lrrrr}", r"\toprule",
+        r"Size & $n$ & Mean Cheby. & Mean OAT & Mean Ratio \\", r"\midrule",
+    ]
+    for label, rr in [("$\\leq 20$", groups["small"]), ("$\\leq 50$", groups["medium"]),
+                       ("$\\leq 100$", groups["large"]), ("$> 100$", groups["xlarge"])]:
+        if not rr:
+            continue
+        ch = np.mean([float(r["chebyshev_radius"]) for r in rr])
+        oat = np.mean([float(r["min_oat_tolerance"]) for r in rr])
+        ratio = np.mean([float(r["simultaneity_ratio"]) for r in rr])
+        lines.append(f"  {label} & {len(rr)} & {ch:.2f} & {oat:.2f} & {ratio:.4f} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
+    _write_tex("exp8_region.tex", lines)
+
+
 def main():
     print("Generating LaTeX tables:")
     gen_exp1()
@@ -165,6 +236,8 @@ def main():
     gen_exp3()
     gen_exp4()
     gen_exp6()
+    gen_exp7()
+    gen_exp8()
     print("Done.")
 
 
