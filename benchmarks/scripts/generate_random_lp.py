@@ -47,11 +47,12 @@ def generate_lp(n_vars, n_cons, density, seed):
     slack = rng.uniform(0.1, 10, n_cons)
     b = A @ x_feas + slack
     c = rng.uniform(0.1, 5, n_vars)
+    upper_bounds = x_feas * 3  # prevents unbounded
 
-    return c, A, b
+    return c, A, b, upper_bounds
 
 
-def write_lp_file(filepath, name, c, A, b):
+def write_lp_file(filepath, name, c, A, b, upper_bounds=None):
     """Write LP problem to .lp file format."""
     n, m = len(c), len(b)
     var_names = [f"x{j+1}" for j in range(n)]
@@ -72,17 +73,22 @@ def write_lp_file(filepath, name, c, A, b):
                     f.write(f"{sign}{A[i, j]:.6f} {var_names[j]}")
                     first = False
             f.write(f" <= {b[i]:.6f}\n")
+        if upper_bounds is not None:
+            f.write("\nBounds\n")
+            for j in range(n):
+                f.write(f" 0 <= {var_names[j]} <= {upper_bounds[j]:.6f}\n")
         f.write("\nEnd\n")
 
 
-def solve_highs(c, A, b):
-    """Solve with HiGHS, return (optimal_value, time)."""
+def solve_highs(c, A, b, upper_bounds=None):
+    """Solve with HiGHS, return (optimal_value, time, status_name)."""
     import highspy
     n, m = len(c), len(b)
     h = highspy.Highs()
     h.setOptionValue("output_flag", False)
     for j in range(n):
-        h.addVar(0.0, highspy.kHighsInf)
+        ub = float(upper_bounds[j]) if upper_bounds is not None else highspy.kHighsInf
+        h.addVar(0.0, ub)
     for j in range(n):
         h.changeColCost(j, float(c[j]))
     h.changeObjectiveSense(highspy.ObjSense.kMaximize)
@@ -93,27 +99,30 @@ def solve_highs(c, A, b):
     start = time.perf_counter()
     h.run()
     elapsed = time.perf_counter() - start
+    status = h.getModelStatus().name
     if h.getModelStatus() == highspy.HighsModelStatus.kOptimal:
-        return h.getInfoValue("objective_function_value")[1], elapsed
-    return None, elapsed
+        return h.getInfoValue("objective_function_value")[1], elapsed, status
+    return None, elapsed, status
 
 
-def solve_internal(c, A, b):
-    """Solve with Internal Simplex, return (optimal_value, time, iters) or None."""
+def solve_internal(c, A, b, upper_bounds=None):
+    """Solve with Internal Simplex, return (optimal_value, time, iters, status)."""
     try:
         from clara.model.problem import LPProblem
         from clara.engine.simplex import RevisedSimplex
-        p = LPProblem(c=c, A=A, b=b)
+        ub = np.array(upper_bounds) if upper_bounds is not None else None
+        p = LPProblem(c=c, A=A, b=b, upper_bounds=ub)
         start = time.perf_counter()
         state = RevisedSimplex(p).solve()
         elapsed = time.perf_counter() - start
+        status = state.status.name
         if elapsed > 60:
-            return None, elapsed, 0
+            return None, elapsed, 0, "TIMEOUT"
         if state.is_optimal:
-            return state.optimal_value, elapsed, state.iteration_count
-        return None, elapsed, state.iteration_count
-    except Exception:
-        return None, 0, 0
+            return state.optimal_value, elapsed, state.iteration_count, status
+        return None, elapsed, state.iteration_count, status
+    except Exception as e:
+        return None, 0, 0, f"ERROR:{str(e)[:30]}"
 
 
 def main():
@@ -132,28 +141,33 @@ def main():
                 name = f"rand_n{n}_m{m}_d{d_str}_s{seed}"
                 filepath = OUTPUT_DIR / f"{name}.lp"
 
-                c, A, b = generate_lp(n, m, d, seed)
-                write_lp_file(filepath, name, c, A, b)
+                c, A, b, ub = generate_lp(n, m, d, seed)
+                write_lp_file(filepath, name, c, A, b, ub)
 
-                h_opt, h_time = solve_highs(c, A, b)
+                # HiGHS always runs
+                h_opt, h_time, h_status = solve_highs(c, A, b, ub)
 
                 # Internal solve (skip large instances)
-                i_opt, i_time, i_iters = None, 0, 0
+                i_opt, i_time, i_iters, i_status = None, 0, 0, "skipped"
                 if n <= 100:
-                    i_opt, i_time, i_iters = solve_internal(c, A, b)
+                    i_opt, i_time, i_iters, i_status = solve_internal(c, A, b, ub)
 
                 match = ""
                 if h_opt is not None and i_opt is not None:
                     match = "✓" if abs(h_opt - i_opt) < 0.01 else "✗"
-                elif i_opt is None:
+                elif i_status == "skipped":
                     match = "—"
+                else:
+                    match = i_status
 
                 results.append({
                     "instance": name,
                     "n_vars": n, "n_cons": m,
                     "density": d, "seed": seed,
-                    "optimal_highs": f"{h_opt:.6f}" if h_opt else "",
-                    "optimal_internal": f"{i_opt:.6f}" if i_opt else "timeout",
+                    "optimal_highs": f"{h_opt:.6f}" if h_opt is not None else "",
+                    "highs_status": h_status,
+                    "optimal_internal": f"{i_opt:.6f}" if i_opt is not None else "",
+                    "internal_status": i_status,
                     "match": match,
                     "highs_time": f"{h_time:.4f}",
                     "internal_time": f"{i_time:.4f}",
