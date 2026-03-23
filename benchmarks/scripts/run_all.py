@@ -1,9 +1,16 @@
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 """Run all MPC paper experiments end-to-end.
 
-Usage: python benchmarks/scripts/run_all.py
+Usage: python benchmarks/scripts/run_all.py [--workers N]
 Reproduces all experimental results from the paper.
 """
 
+import argparse
+import multiprocessing as mp
 import subprocess
 import sys
 import time
@@ -11,9 +18,21 @@ from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).parent
 
+# Scripts that accept --workers
+WORKER_SCRIPTS = {
+    "run_cross_validation.py",
+    "run_reopt_decision.py",
+    "run_warmstart_benchmark.py",
+    "run_parametric_benchmark.py",
+    "run_attribution_benchmark.py",
+    "run_region_benchmark.py",
+    "run_explanation_coverage.py",
+    "run_scalability.py",
+}
+
 STEPS = [
     ("Download Netlib instances", "download_netlib.py"),
-    ("Convert MPS → LP", "convert_mps_to_lp.py"),
+    ("Convert MPS -> LP", "convert_mps_to_lp.py"),
     ("Generate random LPs", "generate_random_lp.py"),
     ("Generate perturbations (Netlib)", "generate_perturbations.py --all-netlib"),
     ("Exp 1: Cross-validation", "run_cross_validation.py"),
@@ -32,25 +51,34 @@ STEPS = [
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--workers", type=int, default=max(1, mp.cpu_count() - 1))
+    args = parser.parse_args()
+
     total_start = time.perf_counter()
     passed = 0
     failed = []
 
     print("=" * 60)
-    print("CLARA MPC Paper — Full Experiment Suite")
+    print("CLARA MPC Paper - Full Experiment Suite")
+    print(f"Workers: {args.workers}")
     print("=" * 60)
 
     for i, (desc, script_args) in enumerate(STEPS, 1):
         parts = script_args.split()
         script = SCRIPTS_DIR / parts[0]
-        args = parts[1:]
+        extra_args = parts[1:]
+
+        # Pass --workers to scripts that support it
+        if parts[0] in WORKER_SCRIPTS:
+            extra_args = extra_args + ["--workers", str(args.workers)]
 
         print(f"\n[{i}/{len(STEPS)}] {desc}")
         print("-" * 40)
 
         start = time.perf_counter()
         result = subprocess.run(
-            [sys.executable, str(script)] + args,
+            [sys.executable, str(script)] + extra_args,
             cwd=str(Path(__file__).parent.parent.parent),
             capture_output=False,
             timeout=1800,  # 30 min per step
@@ -58,10 +86,10 @@ def main():
         elapsed = time.perf_counter() - start
 
         if result.returncode == 0:
-            print(f"  ✓ Done ({elapsed:.1f}s)")
+            print(f"  Done ({elapsed:.1f}s)")
             passed += 1
         else:
-            print(f"  ✗ Failed (exit {result.returncode}, {elapsed:.1f}s)")
+            print(f"  Failed (exit {result.returncode}, {elapsed:.1f}s)")
             failed.append(desc)
 
     total = time.perf_counter() - total_start
