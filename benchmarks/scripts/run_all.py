@@ -22,6 +22,8 @@ STEPS = [
     ("Exp 4: Parametric LP", "run_parametric_benchmark.py"),
     ("Exp 5: Explanation coverage", "run_explanation_coverage.py"),
     ("Exp 6: Scalability", "run_scalability.py"),
+    ("Exp 7: Attribution", "run_attribution_benchmark.py"),
+    ("Exp 8: Sensitivity region", "run_region_benchmark.py"),
     ("Reopt comparison (Albici)", "run_reopt_benchmark.py"),
     ("Netlib benchmark", "run_benchmark.py"),
     ("Generate tables", "generate_all_tables.py"),
