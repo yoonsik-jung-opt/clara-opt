@@ -54,8 +54,9 @@ def process_single(task):
         slack = rng.uniform(0.1, 10, m)
         b = A @ x_feas + slack
         c = rng.uniform(0.1, 5, n)
+        upper_bounds = x_feas * 3
 
-        problem = LPProblem(c=c, A=A, b=b)
+        problem = LPProblem(c=c, A=A, b=b, upper_bounds=upper_bounds)
         name = f"scale_n{n}_m{m}_s{seed}"
 
         # Internal Simplex
