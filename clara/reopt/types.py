@@ -344,6 +344,7 @@ class DiffReport:
 
     summary: str
     old_var_names: tuple[str, ...] = ()
+    attribution: Optional["AttributionResult"] = None
 
     def to_text(self) -> str:
         """Full text diff report."""
@@ -419,6 +420,31 @@ class DiffReport:
                     lines.append(f"  {cc.name}: binding \u2192 non-binding")
             lines.append("")
 
+        # Attribution
+        if self.attribution is not None:
+            a = self.attribution
+            lines.append("ATTRIBUTION")
+            if abs(a.delta_z) > 1e-10:
+                rhs_pct = a.rhs_effect / a.delta_z * 100
+                obj_pct = a.obj_effect / a.delta_z * 100
+                int_pct = a.interaction_effect / a.delta_z * 100
+                lines.append(f"  RHS changes: {a.rhs_effect:+.4f} ({rhs_pct:.1f}%)")
+                for name, val in sorted(a.rhs_contributions.items(), key=lambda x: -abs(x[1])):
+                    if abs(val) > 1e-6:
+                        lines.append(f"    {name}: {val:+.4f}")
+                lines.append(f"  Objective changes: {a.obj_effect:+.4f} ({obj_pct:.1f}%)")
+                for name, val in sorted(a.obj_contributions.items(), key=lambda x: -abs(x[1])):
+                    if abs(val) > 1e-6:
+                        lines.append(f"    {name}: {val:+.4f}")
+                if abs(a.interaction_effect) > 1e-6:
+                    lines.append(f"  Interaction: {a.interaction_effect:+.4f} ({int_pct:.1f}%)")
+            if a.shapley_b is not None and a.shapley_c is not None:
+                sb = a.shapley_b / a.delta_z * 100 if abs(a.delta_z) > 1e-10 else 0
+                sc = a.shapley_c / a.delta_z * 100 if abs(a.delta_z) > 1e-10 else 0
+                lines.append(f"  Shapley: \u0394b = {a.shapley_b:.4f} ({sb:.1f}%), "
+                             f"\u0394c = {a.shapley_c:.4f} ({sc:.1f}%)")
+            lines.append("")
+
         # Bottleneck
         lines.append("BOTTLENECK SHIFT")
         if self.bottleneck_shifted:
@@ -471,6 +497,20 @@ class DiffReport:
                 "shifted": self.bottleneck_shifted,
             },
         }
+        if self.attribution is not None:
+            a = self.attribution
+            d["attribution"] = {
+                "delta_z": a.delta_z,
+                "rhs_effect": a.rhs_effect,
+                "obj_effect": a.obj_effect,
+                "interaction_effect": a.interaction_effect,
+                "rhs_contributions": a.rhs_contributions,
+                "obj_contributions": a.obj_contributions,
+                "shapley_b": a.shapley_b,
+                "shapley_c": a.shapley_c,
+                "basis_preserved": a.basis_preserved,
+            }
+        return d
 
     def to_json(self, indent: int = 2) -> str:
         import json
