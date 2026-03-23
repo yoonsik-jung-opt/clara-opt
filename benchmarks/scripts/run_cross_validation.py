@@ -30,47 +30,67 @@ def run_instance(filepath):
     from clara.engine.highs_backend import HiGHSBackend
 
     problem = load_problem(filepath)
-    n, m = problem.num_variables, problem.num_constraints
+    n = problem.num_variables
+
+    # HiGHS always runs
+    t0 = time.perf_counter()
+    try:
+        sh = HiGHSBackend().solve(problem)
+        th = time.perf_counter() - t0
+        h_status = sh.status.name
+        zh = sh.optimal_value if sh.is_optimal else None
+    except Exception:
+        th = 0
+        h_status = "ERROR"
+        zh = None
 
     # Internal
     t0 = time.perf_counter()
     try:
         si = RevisedSimplex(problem).solve()
         ti = time.perf_counter() - t0
-        if not si.is_optimal or ti > 60:
-            return None
+        i_status = si.status.name
+        if ti > 60:
+            i_status = "TIMEOUT"
+        zi = si.optimal_value if si.is_optimal else None
     except Exception:
-        return None
+        ti = 0
+        i_status = "ERROR"
+        zi = None
+        si = None
 
-    # HiGHS
-    t0 = time.perf_counter()
-    sh = HiGHSBackend().solve(problem)
-    th = time.perf_counter() - t0
-    if not sh.is_optimal:
-        return None
+    opt_gap = abs(zi - zh) / max(abs(zh), 1e-10) if zi is not None and zh is not None else None
 
-    zi, zh = si.optimal_value, sh.optimal_value
-    opt_gap = abs(zi - zh) / max(abs(zh), 1e-10)
+    # Solution diff & sensitivity match (only if both optimal)
+    sol_diff = None
+    obj_match = rhs_match = None
+    if si and si.is_optimal and sh and sh.is_optimal:
+        vi = {v.name: v.value for v in si.variables}
+        vh = {v.name: v.value for v in sh.variables}
+        sol_diff = max(abs(vi.get(k, 0) - vh.get(k, 0)) for k in vi) if vi else 0
+        obj_match = _range_match(si.sensitivity.obj_coeff_ranges, sh.sensitivity.obj_coeff_ranges)
+        rhs_match = _range_match(si.sensitivity.rhs_ranges, sh.sensitivity.rhs_ranges)
 
-    # Solution diff
-    vi = {v.name: v.value for v in si.variables}
-    vh = {v.name: v.value for v in sh.variables}
-    sol_diff = max(abs(vi.get(k, 0) - vh.get(k, 0)) for k in vi)
-
-    # Sensitivity match
-    obj_match = _range_match(si.sensitivity.obj_coeff_ranges, sh.sensitivity.obj_coeff_ranges)
-    rhs_match = _range_match(si.sensitivity.rhs_ranges, sh.sensitivity.rhs_ranges)
+    match = ""
+    if zi is not None and zh is not None:
+        match = "✓" if abs(zi - zh) < 0.01 else "✗"
+    elif zi is None:
+        match = i_status
 
     return {
         "instance": Path(filepath).stem,
         "n_vars": n, "n_cons": problem.num_constraints,
-        "z_internal": f"{zi:.6f}", "z_highs": f"{zh:.6f}",
-        "opt_gap": f"{opt_gap:.2e}",
-        "sol_diff": f"{sol_diff:.2e}",
-        "obj_range_match": f"{obj_match:.1%}",
-        "rhs_range_match": f"{rhs_match:.1%}",
+        "z_internal": f"{zi:.6f}" if zi is not None else "",
+        "z_highs": f"{zh:.6f}" if zh is not None else "",
+        "internal_status": i_status,
+        "highs_status": h_status,
+        "match": match,
+        "opt_gap": f"{opt_gap:.2e}" if opt_gap is not None else "",
+        "sol_diff": f"{sol_diff:.2e}" if sol_diff is not None else "",
+        "obj_range_match": f"{obj_match:.1%}" if obj_match is not None else "",
+        "rhs_range_match": f"{rhs_match:.1%}" if rhs_match is not None else "",
         "time_internal": f"{ti:.4f}", "time_highs": f"{th:.4f}",
-        "iterations": si.iteration_count,
+        "iterations": si.iteration_count if si else 0,
     }
 
 
