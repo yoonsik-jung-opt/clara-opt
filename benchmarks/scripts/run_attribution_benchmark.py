@@ -46,16 +46,20 @@ def process_single(task):
         old_problem = load_problem(base_file)
         old_state = RevisedSimplex(old_problem).solve()
         if not old_state.is_optimal:
-            return None
+            return {"base_instance": base_name, "error": f"old: {old_state.status.name}"}
 
         new_problem = load_problem(pert_file)
         new_state = RevisedSimplex(new_problem).solve()
         if not new_state.is_optimal:
-            return None
+            # HiGHS fallback
+            from clara.engine.highs_backend import HiGHSBackend
+            new_state = HiGHSBackend().solve(new_problem)
+            if not new_state.is_optimal:
+                return {"base_instance": base_name, "error": f"new: {new_state.status.name}"}
 
         change = ChangeDetector().detect(old_problem, new_problem)
         if change is None:
-            return None
+            return {"base_instance": base_name, "error": "no change detected"}
 
         attr = ChangeAttributor().attribute(
             old_state, new_state, old_problem, new_problem, change
@@ -88,8 +92,10 @@ def process_single(task):
             "top_obj_param": top_obj[0],
             "top_obj_value": f"{top_obj[1]:.6f}",
         }
-    except Exception:
-        return None
+    except Exception as e:
+        import traceback
+        return {"base_instance": base_name, "perturbation": pi.get("perturbation",""),
+                "error": str(e)[:200]}
 
 
 def main():
@@ -133,29 +139,38 @@ def main():
     print(f"Exp 7: Attribution on {len(tasks)} RC pairs (workers={args.workers})...")
 
     n_workers = args.workers
-    results = []
+    all_results = []
     with mp.Pool(n_workers) as pool:
         for i, r in enumerate(pool.imap_unordered(process_single, tasks)):
             if r is not None:
-                results.append(r)
+                all_results.append(r)
             if (i + 1) % 20 == 0:
-                print(f"  [{i+1}/{len(tasks)}] {len(results)} successful")
+                valid = [x for x in all_results if "error" not in x]
+                print(f"  [{i+1}/{len(tasks)}] {len(valid)} successful, {len(all_results)-len(valid)} errors")
 
-    if not results:
-        print("No results.")
+    valid = [r for r in all_results if "error" not in r]
+    errors = [r for r in all_results if "error" in r]
+
+    if errors:
+        print(f"\nErrors: {len(errors)} instances failed")
+        for e in errors[:3]:
+            print(f"  {e.get('base_instance','?')}: {e.get('error','?')}")
+
+    if not valid:
+        print("No valid results.")
         return
 
     out = RESULTS_DIR / "exp7_attribution.csv"
     with open(out, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=results[0].keys())
+        w = csv.DictWriter(fh, fieldnames=valid[0].keys())
         w.writeheader()
-        w.writerows(results)
+        w.writerows(valid)
 
-    preserved = sum(1 for r in results if r["basis_preserved"])
-    print(f"\nDone: {len(results)} RC pairs -> {out}")
-    print(f"Basis preserved: {preserved}/{len(results)}")
-    rhs_pcts = [float(r["rhs_pct"]) for r in results]
-    obj_pcts = [float(r["obj_pct"]) for r in results]
+    preserved = sum(1 for r in valid if r.get("basis_preserved"))
+    print(f"\nDone: {len(valid)} RC pairs -> {out}")
+    print(f"Basis preserved: {preserved}/{len(valid)}")
+    rhs_pcts = [float(r["rhs_pct"]) for r in valid]
+    obj_pcts = [float(r["obj_pct"]) for r in valid]
     print(f"Mean RHS contribution: {np.mean(rhs_pcts):.1f}%")
     print(f"Mean OBJ contribution: {np.mean(obj_pcts):.1f}%")
 
