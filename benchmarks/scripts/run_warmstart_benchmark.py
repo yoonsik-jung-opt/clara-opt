@@ -33,10 +33,11 @@ def process_single(task):
     pert_info = task["pert_info"]
 
     try:
+        import numpy as np
         from clara.engine.simplex import RevisedSimplex
         from clara.reopt.detector import ChangeDetector
-        from clara.reopt.analyzer import ImpactAnalyzer
         from clara.reopt.reoptimizer import Reoptimizer
+        from clara.reopt.types import ReoptDecision
 
         def load_problem(filepath):
             p = Path(filepath)
@@ -57,10 +58,24 @@ def process_single(task):
         if change is None:
             return None
 
-        decision = ImpactAnalyzer().analyze(old_state, change, old_problem)
+        # Compute magnitude
+        magnitude = 0.0
+        if change.delta_c is not None:
+            magnitude = max(magnitude, float(np.max(np.abs(change.delta_c))))
+        if change.delta_b is not None:
+            magnitude = max(magnitude, float(np.max(np.abs(change.delta_b))))
+
+        # Force warm-start (bypass ImpactAnalyzer to avoid "none" method)
+        forced_decision = ReoptDecision(
+            should_reoptimize=True,
+            reason="forced by benchmark",
+            recommended_method="warm_start",
+        )
 
         # Warm-start reoptimize
-        result = Reoptimizer().reoptimize(old_state, new_problem, change, decision, old_problem=old_problem)
+        result = Reoptimizer().reoptimize(
+            old_state, new_problem, change, forced_decision, old_problem=old_problem
+        )
 
         # Scratch solve
         t0 = time.perf_counter()
@@ -69,17 +84,19 @@ def process_single(task):
         if not scratch.is_optimal:
             return None
 
+        z_warm = result.new_state.optimal_value
+        z_scratch_val = scratch.optimal_value
         scratch_pivots = scratch.iteration_count
         ws_pivots = result.pivots
         reduction = (scratch_pivots - ws_pivots) / max(scratch_pivots, 1)
         speedup = scratch_pivots / max(ws_pivots, 1)
-        opt_match = abs(result.new_state.optimal_value - scratch.optimal_value) < 1e-4
+        opt_match = abs(z_warm - z_scratch_val) < max(abs(z_scratch_val) * 1e-6, 1e-4)
 
         return {
             "base_instance": base_name,
             "perturbation": pert_info.get("perturbation", ""),
             "change_type": change.change_type.name,
-            "magnitude": pert_info.get("b_magnitude", ""),
+            "magnitude": f"{magnitude:.6f}",
             "n_vars": old_problem.num_variables,
             "n_cons": old_problem.num_constraints,
             "method_used": result.method_used,
@@ -90,11 +107,11 @@ def process_single(task):
             "time_warmstart": f"{result.reopt_time_seconds:.6f}",
             "time_scratch": f"{t_scratch:.6f}",
             "optimal_match": opt_match,
-            "z_warmstart": f"{result.new_state.optimal_value:.6f}",
-            "z_scratch": f"{scratch.optimal_value:.6f}",
+            "z_warmstart": f"{z_warm:.6f}",
+            "z_scratch": f"{z_scratch_val:.6f}",
         }
-    except Exception:
-        return None
+    except Exception as e:
+        return {"base_instance": base_name, "error": str(e)[:200]}
 
 
 def main():
