@@ -44,8 +44,9 @@ class SimultaneousRegionAnalyzer:
         oat_obj = self._extract_oat_obj(state, problem)
 
         all_oat = list(oat_rhs.values()) + list(oat_obj.values())
-        finite_oat = [v for v in all_oat if v < 1e20]
-        min_oat = min(finite_oat) if finite_oat else float("inf")
+        # Exclude zero tolerances (degenerate constraints) and infinities
+        positive_oat = [v for v in all_oat if 1e-10 < v < 1e20]
+        min_oat = min(positive_oat) if positive_oat else float("inf")
 
         # Build polyhedron Hδ ≤ h
         if state.basis_inverse is None:
