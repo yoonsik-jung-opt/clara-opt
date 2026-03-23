@@ -169,6 +169,81 @@ class ReoptResult:
 
 
 # ============================================================
+# Attribution result
+# ============================================================
+
+@dataclass(frozen=True)
+class AttributionResult:
+    """Decomposition of objective change into parameter contributions."""
+    delta_z: float
+    rhs_effect: float       # yᵀΔb (first-order)
+    obj_effect: float       # Δcᵀx (first-order)
+    interaction_effect: float  # Δc_Bᵀ B⁻¹ Δb
+    first_order_residual: float
+
+    rhs_contributions: dict[str, float]   # per-constraint: y_i * Δb_i
+    obj_contributions: dict[str, float]   # per-variable: Δc_j * x_j
+
+    shapley_b: Optional[float] = None
+    shapley_c: Optional[float] = None
+    z_b_only: Optional[float] = None
+    z_c_only: Optional[float] = None
+
+    basis_preserved: bool = False
+    nonlinearity: float = 0.0
+
+    @property
+    def summary(self) -> str:
+        parts = []
+        if abs(self.delta_z) > 1e-10:
+            rhs_pct = self.rhs_effect / self.delta_z * 100
+            obj_pct = self.obj_effect / self.delta_z * 100
+            int_pct = self.interaction_effect / self.delta_z * 100
+            parts.append(f"RHS changes contributed {rhs_pct:.1f}%.")
+            parts.append(f"Objective changes contributed {obj_pct:.1f}%.")
+            if abs(self.interaction_effect) > 1e-10:
+                parts.append(f"Interaction term: {int_pct:.1f}%.")
+        if self.shapley_b is not None and self.shapley_c is not None:
+            sb = self.shapley_b / self.delta_z * 100 if abs(self.delta_z) > 1e-10 else 0
+            sc = self.shapley_c / self.delta_z * 100 if abs(self.delta_z) > 1e-10 else 0
+            parts.append(f"Shapley: Δb = {sb:.1f}%, Δc = {sc:.1f}%.")
+        if self.basis_preserved:
+            parts.append("First-order decomposition is exact (basis preserved).")
+        return " ".join(parts)
+
+
+# ============================================================
+# Sensitivity region
+# ============================================================
+
+@dataclass(frozen=True)
+class SensitivityRegion:
+    """Simultaneous sensitivity region analysis."""
+    chebyshev_radius: float
+    chebyshev_center: Optional[tuple]
+    min_oat_tolerance: float
+    simultaneity_ratio: float  # chebyshev / min_oat
+
+    oat_rhs_tolerances: dict[str, float]
+    oat_obj_tolerances: dict[str, float]
+
+    projections: Optional[dict] = None  # {(i, j): [(x, y), ...]}
+
+    @property
+    def summary(self) -> str:
+        r = self.chebyshev_radius
+        oat = self.min_oat_tolerance
+        ratio = self.simultaneity_ratio
+        return (
+            f"Chebyshev radius: {r:.4f}. "
+            f"Min one-at-a-time tolerance: {oat:.4f}. "
+            f"Simultaneity ratio: {ratio:.4f}. "
+            f"One-at-a-time analysis overestimates the safe region by "
+            f"{1/max(ratio, 1e-10):.1f}x."
+        )
+
+
+# ============================================================
 # Parametric LP structures
 # ============================================================
 
