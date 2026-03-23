@@ -63,6 +63,10 @@ htmlcov/
 benchmarks/results/*
 !benchmarks/results/final/
 
+# Generated benchmark instances (reproducible via scripts)
+benchmarks/instances/random/*.lp
+benchmarks/instances/perturbations/
+
 # OS
 .DS_Store
 Thumbs.db

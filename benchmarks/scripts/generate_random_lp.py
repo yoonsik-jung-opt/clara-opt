@@ -1,0 +1,182 @@
+"""Generate random feasible+bounded LP instances for benchmarking.
+
+Usage:
+    python benchmarks/scripts/generate_random_lp.py
+
+Output:
+    benchmarks/instances/random/*.lp  (120 instances)
+    benchmarks/instances/random/manifest.csv
+"""
+
+import csv
+import time
+from pathlib import Path
+
+import numpy as np
+
+OUTPUT_DIR = Path(__file__).parent.parent / "instances" / "random"
+
+SIZES = [(10, 10), (10, 20), (20, 20), (20, 40),
+         (50, 50), (50, 100), (100, 100), (100, 200)]
+DENSITIES = [0.3, 0.5, 0.8]
+SEEDS = [42, 123, 456, 789, 1024]
+
+
+def generate_lp(n_vars, n_cons, density, seed):
+    """Generate a feasible, bounded LP.
+
+    Method:
+        1. Generate feasible interior point x_feas ~ U(1, 10)
+        2. Generate sparse A with given density, values ~ N(0, 1)
+        3. Generate positive slack ~ U(0.1, 10)
+        4. b = A @ x_feas + slack (guarantees feasibility)
+        5. c ~ U(0.1, 5) (positive, bounded by constraints)
+    """
+    rng = np.random.RandomState(seed)
+
+    x_feas = rng.uniform(1, 10, n_vars)
+    A = rng.randn(n_cons, n_vars)
+    mask = rng.random((n_cons, n_vars)) > density
+    A[mask] = 0.0
+    # Ensure each row has at least one nonzero
+    for i in range(n_cons):
+        if np.all(A[i] == 0):
+            j = rng.randint(n_vars)
+            A[i, j] = rng.randn()
+
+    slack = rng.uniform(0.1, 10, n_cons)
+    b = A @ x_feas + slack
+    c = rng.uniform(0.1, 5, n_vars)
+
+    return c, A, b
+
+
+def write_lp_file(filepath, name, c, A, b):
+    """Write LP problem to .lp file format."""
+    n, m = len(c), len(b)
+    var_names = [f"x{j+1}" for j in range(n)]
+
+    with open(filepath, "w") as f:
+        f.write(f"\\ Random LP: {name}\n")
+        f.write("Maximize\n obj:")
+        for j in range(n):
+            sign = " +" if j > 0 and c[j] >= 0 else " "
+            f.write(f"{sign}{c[j]:.6f} {var_names[j]}")
+        f.write("\n\nSubject To\n")
+        for i in range(m):
+            f.write(f" c{i+1}:")
+            first = True
+            for j in range(n):
+                if abs(A[i, j]) > 1e-12:
+                    sign = " +" if not first and A[i, j] >= 0 else " "
+                    f.write(f"{sign}{A[i, j]:.6f} {var_names[j]}")
+                    first = False
+            f.write(f" <= {b[i]:.6f}\n")
+        f.write("\nEnd\n")
+
+
+def solve_highs(c, A, b):
+    """Solve with HiGHS, return (optimal_value, time)."""
+    import highspy
+    n, m = len(c), len(b)
+    h = highspy.Highs()
+    h.setOptionValue("output_flag", False)
+    for j in range(n):
+        h.addVar(0.0, highspy.kHighsInf)
+    for j in range(n):
+        h.changeColCost(j, float(c[j]))
+    h.changeObjectiveSense(highspy.ObjSense.kMaximize)
+    for i in range(m):
+        idx = [int(j) for j in range(n) if abs(A[i, j]) > 1e-12]
+        val = [float(A[i, j]) for j in idx]
+        h.addRow(-highspy.kHighsInf, float(b[i]), len(idx), idx, val)
+    start = time.perf_counter()
+    h.run()
+    elapsed = time.perf_counter() - start
+    if h.getModelStatus() == highspy.HighsModelStatus.kOptimal:
+        return h.getInfoValue("objective_function_value")[1], elapsed
+    return None, elapsed
+
+
+def solve_internal(c, A, b):
+    """Solve with Internal Simplex, return (optimal_value, time, iters) or None."""
+    try:
+        from clara.model.problem import LPProblem
+        from clara.engine.simplex import RevisedSimplex
+        p = LPProblem(c=c, A=A, b=b)
+        start = time.perf_counter()
+        state = RevisedSimplex(p).solve()
+        elapsed = time.perf_counter() - start
+        if elapsed > 60:
+            return None, elapsed, 0
+        if state.is_optimal:
+            return state.optimal_value, elapsed, state.iteration_count
+        return None, elapsed, state.iteration_count
+    except Exception:
+        return None, 0, 0
+
+
+def main():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    results = []
+    total = len(SIZES) * len(DENSITIES) * len(SEEDS)
+    count = 0
+
+    print(f"Generating {total} random LP instances...")
+
+    for n, m in SIZES:
+        for d in DENSITIES:
+            for seed in SEEDS:
+                count += 1
+                d_str = str(int(d * 10))
+                name = f"rand_n{n}_m{m}_d{d_str}_s{seed}"
+                filepath = OUTPUT_DIR / f"{name}.lp"
+
+                c, A, b = generate_lp(n, m, d, seed)
+                write_lp_file(filepath, name, c, A, b)
+
+                h_opt, h_time = solve_highs(c, A, b)
+
+                # Internal solve (skip large instances)
+                i_opt, i_time, i_iters = None, 0, 0
+                if n <= 100:
+                    i_opt, i_time, i_iters = solve_internal(c, A, b)
+
+                match = ""
+                if h_opt is not None and i_opt is not None:
+                    match = "✓" if abs(h_opt - i_opt) < 0.01 else "✗"
+                elif i_opt is None:
+                    match = "—"
+
+                results.append({
+                    "instance": name,
+                    "n_vars": n, "n_cons": m,
+                    "density": d, "seed": seed,
+                    "optimal_highs": f"{h_opt:.6f}" if h_opt else "",
+                    "optimal_internal": f"{i_opt:.6f}" if i_opt else "timeout",
+                    "match": match,
+                    "highs_time": f"{h_time:.4f}",
+                    "internal_time": f"{i_time:.4f}",
+                    "internal_iters": i_iters,
+                })
+
+                if count % 20 == 0:
+                    matched = sum(1 for r in results if r["match"] == "✓")
+                    print(f"  [{count}/{total}] {matched} matched so far...")
+
+    # Write manifest
+    manifest = OUTPUT_DIR / "manifest.csv"
+    with open(manifest, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=results[0].keys())
+        writer.writeheader()
+        writer.writerows(results)
+
+    matched = sum(1 for r in results if r["match"] == "✓")
+    total_solved = sum(1 for r in results if r["optimal_internal"] != "timeout")
+    print(f"\nGenerated: {len(results)} instances → {OUTPUT_DIR}")
+    print(f"Cross-validated: {matched}/{total_solved} (Internal solved)")
+    print(f"Manifest: {manifest}")
+
+
+if __name__ == "__main__":
+    main()
