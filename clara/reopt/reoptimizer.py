@@ -57,7 +57,7 @@ class Reoptimizer:
             return self._no_action(old_state, new_problem, change)
         elif method == "recompute":
             return self._recompute(old_state, new_problem, change)
-        elif method == "warm_start":
+        elif method in ("warm_start", "warm_start_dual"):
             return self._warm_start(old_state, new_problem, change)
         elif method == "parametric_lp":
             return self._parametric_lp(old_state, new_problem, change, old_problem)
