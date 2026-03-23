@@ -26,7 +26,7 @@ from scipy.optimize import linprog
 # Constants
 # ---------------------------------------------------------------------------
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
+FIXTURES_DIR = Path(__file__).parent
 
 TOL_OPTIMAL = 1e-6   # tolerance for optimal value comparison
 TOL_VARIABLE = 1e-4  # tolerance for variable values (looser for solver differences)
