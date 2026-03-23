@@ -139,7 +139,6 @@ class SimultaneousRegionAnalyzer:
         rows_h = []
 
         # Primal feasibility: B⁻¹ @ (b + Δb) ≥ 0
-        # → B⁻¹ @ Δb ≥ -x_B
         # → -B⁻¹ @ Δb ≤ x_B
         for i in range(m_basis):
             row = np.zeros(dim)
@@ -148,8 +147,25 @@ class SimultaneousRegionAnalyzer:
             rows_H.append(row)
             rows_h.append(float(x_B[i]))
 
-            # Also: B⁻¹ @ Δb can't make x_B too large (implicit in LP structure)
-            # Skip upper bounds for simplicity
+        # Also bound from above using OAT ranges for each b_i
+        # This ensures the polyhedron is bounded
+        for j in range(dim):
+            cname = problem.constraint_names[j] if j < len(problem.constraint_names) else ""
+            if cname in state.sensitivity.rhs_ranges:
+                lo, hi_val = state.sensitivity.rhs_ranges[cname]
+                b_j = float(problem.b[j])
+                # Δb_j ≤ hi - b_j
+                if not math.isinf(hi_val):
+                    row_up = np.zeros(dim)
+                    row_up[j] = 1.0
+                    rows_H.append(row_up)
+                    rows_h.append(hi_val - b_j)
+                # -Δb_j ≤ b_j - lo
+                if not math.isinf(lo):
+                    row_lo = np.zeros(dim)
+                    row_lo[j] = -1.0
+                    rows_H.append(row_lo)
+                    rows_h.append(b_j - lo)
 
         if not rows_H:
             return np.zeros((1, dim)), np.ones(1), []
