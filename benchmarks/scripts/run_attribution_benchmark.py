@@ -99,41 +99,38 @@ def main():
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    base_dirs = sorted(d for d in PERTURBATIONS_DIR.iterdir() if d.is_dir())[:20]
-    print(f"Exp 7: Attribution on {len(base_dirs)} base instances (RC only, workers={args.workers})...")
-
+    # Use random LP instances (match=✓, n≤50) for reliability
     tasks = []
-    for base_dir in base_dirs:
-        base_name = base_dir.name
-        base_file = None
-        for ext in [".mps", ".lp"]:
-            for d in [NETLIB_DIR, RANDOM_DIR]:
-                p = d / f"{base_name}{ext}"
-                if p.exists():
-                    base_file = str(p)
-                    break
-            if base_file:
-                break
-        if not base_file:
+    rand_manifest = RANDOM_DIR / "manifest.csv"
+    if rand_manifest.exists():
+        with open(rand_manifest) as fh:
+            bases = [r["instance"] for r in csv.DictReader(fh)
+                     if r.get("match", "").strip() == "✓" and int(r["n_vars"]) <= 50]
+    else:
+        bases = []
+
+    for base_name in bases:
+        base_file = RANDOM_DIR / f"{base_name}.lp"
+        if not base_file.exists():
             continue
-
-        manifest = base_dir / "manifest.csv"
-        if not manifest.exists():
+        pert_dir = PERTURBATIONS_DIR / base_name
+        pert_manifest = pert_dir / "manifest.csv"
+        if not pert_manifest.exists():
             continue
-
-        with open(manifest) as fh:
-            perts = [r for r in csv.DictReader(fh) if r["type"] == "RC"]
-
+        with open(pert_manifest) as fh:
+            perts = [r for r in csv.DictReader(fh) if r.get("type", "") == "RC"]
         for pi in perts:
-            pf = base_dir / f"{pi['instance']}.lp"
+            pf = pert_dir / f"{pi['instance']}.lp"
             if not pf.exists():
                 continue
             tasks.append({
-                "base_file": base_file,
+                "base_file": str(base_file),
                 "pert_file": str(pf),
                 "base_name": base_name,
                 "pert_info": dict(pi),
             })
+
+    print(f"Exp 7: Attribution on {len(tasks)} RC pairs (workers={args.workers})...")
 
     n_workers = args.workers
     results = []

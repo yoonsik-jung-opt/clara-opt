@@ -110,15 +110,12 @@ def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     files = []
 
-    for f in sorted(NETLIB_DIR.glob("*.mps")):
-        if f.stem != "blend":
-            files.append(f)
-
+    # Use random LP instances (match=✓, n≤50) for reliability
     manifest = RANDOM_DIR / "manifest.csv"
     if manifest.exists():
         with open(manifest) as fh:
             for row in csv.DictReader(fh):
-                if row["match"] == "✓":
+                if row.get("match", "").strip() == "✓" and int(row["n_vars"]) <= 50:
                     lp = RANDOM_DIR / f"{row['instance']}.lp"
                     if lp.exists():
                         files.append(lp)
