@@ -205,6 +205,11 @@ class SolveState:
     iteration_history: Optional[tuple[IterationSnapshot, ...]] = None
     bnb_history: Optional[tuple[BnBNodeSnapshot, ...]] = None
 
+    # --- Numerical diagnostics ---
+    condition_number: Optional[float] = None   # κ(B), flagged if > 1e8
+    degenerate_count: int = 0                  # basic vars with value < 1e-8
+    basis_robustness_d0: Optional[float] = None  # min_i x_B[i] / ||B⁻¹_i||₂
+
     # --- Problem reference (for context in explanations) ---
     problem_name: str = ""
     variable_names: tuple[str, ...] = ()

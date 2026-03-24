@@ -512,6 +512,13 @@ class RevisedSimplex:
             rhs_ranges={c.name: c.rhs_range for c in constraints},
         )
 
+        # Numerical diagnostics
+        cond_num = float(np.linalg.cond(self.B_inv)) if self.B_inv.shape[0] > 0 else 0.0
+        degen_count = int(np.sum(x_B < 1e-8))
+        row_norms = np.linalg.norm(self.B_inv, axis=1)
+        safe_norms = np.where(row_norms > 1e-12, row_norms, np.inf)
+        d0 = float(np.min(x_B / safe_norms))
+
         return SolveState(
             status=SolveStatus.OPTIMAL,
             optimal_value=optimal_value,
@@ -523,6 +530,9 @@ class RevisedSimplex:
             iteration_count=len(self.iterations),
             basis_inverse=self.B_inv.copy(),
             iteration_history=tuple(self.iterations),
+            condition_number=cond_num,
+            degenerate_count=degen_count,
+            basis_robustness_d0=d0,
             problem_name=self.problem.name,
             variable_names=tuple(self.problem.var_names),
             constraint_names=tuple(self.problem.constraint_names),
