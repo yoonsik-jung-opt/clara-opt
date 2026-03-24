@@ -116,8 +116,11 @@ class Reoptimizer:
         if B_inv is None:
             return self._scratch(new_problem)
 
-        # Extract basis indices from old state
-        basis = self._extract_basis_indices(old_state, new_problem)
+        # Use stored basis indices if available
+        if old_state.basis_indices is not None:
+            basis = list(old_state.basis_indices)
+        else:
+            basis = self._extract_basis_indices(old_state, new_problem)
         n = new_problem.num_variables
         m = new_problem.num_constraints
 
@@ -219,7 +222,11 @@ class Reoptimizer:
         if B_inv.shape[0] != A_aug.shape[0]:
             return self._scratch(new_problem)
 
-        basis = self._extract_basis_indices(old_state, new_problem)
+        # Use stored basis indices if available, otherwise extract heuristically
+        if old_state.basis_indices is not None:
+            basis = list(old_state.basis_indices)
+        else:
+            basis = self._extract_basis_indices(old_state, new_problem)
         solver = RevisedSimplex.from_warm_start(new_problem, basis, B_inv)
 
         x_B = B_inv @ solver.b

@@ -89,6 +89,7 @@ class RevisedSimplex:
 
         # B⁻¹ starts as identity (basis = slacks)
         self.B_inv = np.eye(m)
+        self._warm_started = False
 
         # History
         self.iterations: list[IterationSnapshot] = []
@@ -141,14 +142,15 @@ class RevisedSimplex:
         solver = cls(problem)
         solver.basis = list(basis)
         solver.B_inv = basis_inverse.copy()
+        solver._warm_started = True
         return solver
 
     def solve(self) -> SolveState:
         """Run Revised Simplex and return a SolveState."""
         start_time = time.perf_counter()
 
-        # Handle negative RHS via Big-M Phase I
-        if np.any(self.b < -PIVOT_TOL):
+        # Handle negative RHS via Big-M Phase I (skip if warm-started with valid basis)
+        if not self._warm_started and np.any(self.b < -PIVOT_TOL):
             return self._solve_with_bigm(start_time)
 
         status = self._simplex_loop()
@@ -529,6 +531,7 @@ class RevisedSimplex:
             solve_time_seconds=elapsed,
             iteration_count=len(self.iterations),
             basis_inverse=self.B_inv.copy(),
+            basis_indices=tuple(self.basis),
             iteration_history=tuple(self.iterations),
             condition_number=cond_num,
             degenerate_count=degen_count,

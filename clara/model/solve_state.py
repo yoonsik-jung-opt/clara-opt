@@ -202,6 +202,7 @@ class SolveState:
 
     # --- Internal engine only (None if HiGHS backend) ---
     basis_inverse: Optional[np.ndarray] = None
+    basis_indices: Optional[tuple[int, ...]] = None  # column indices of basis in [A|I]
     iteration_history: Optional[tuple[IterationSnapshot, ...]] = None
     bnb_history: Optional[tuple[BnBNodeSnapshot, ...]] = None
 
