@@ -33,9 +33,9 @@ CLARA EXPERIMENT RESULTS — PAPER VALUES
   Total: n=3480, acc=64.6%, FN rate=6.4%
 
 === S6.5 Warm-start (from Exp 3) ===
-  Total: n=2150, match=1752/2150
-  Speedup: mean=0.7x, median=0.7x, max=1.9x
-  Pivot reduction: mean=0.0%
+  Total: n=2150, match=2024/2150
+  Speedup: mean=1.7x, median=1.0x, max=18.7x
+  Pivot reduction: mean=17.6%
 
 === Albici Golden Tests ===
   base→b1: method=warm_start, pivots=0, z=3677.7778, match=✓
