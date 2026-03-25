@@ -82,6 +82,120 @@ class SimultaneousRegionAnalyzer:
             projections=projections,
         )
 
+    def analyze_joint(
+        self, state: SolveState, problem: LPProblem,
+    ) -> dict:
+        """Compute joint (Δb, Δc) Chebyshev region.
+
+        S+ = { (δ_b, δ_c) : -B⁻¹ δ_b ≤ x_B,  -G δ_c ≤ c̄,  box constraints }
+
+        Returns dict with chebyshev_radius_joint, chebyshev_radius_b_only, etc.
+        """
+        n = problem.num_variables
+        m = problem.num_constraints
+
+        if state.basis_inverse is None:
+            return {"chebyshev_radius_joint": 0.0, "chebyshev_radius_b_only": 0.0, "ratio": 0.0}
+
+        B_inv = state.basis_inverse
+        from clara.engine.simplex import RevisedSimplex
+        A_aug, b_aug, _ = RevisedSimplex._add_upper_bound_rows(problem)
+        m_aug = A_aug.shape[0]
+        x_B = B_inv @ b_aug
+
+        # Get basis indices (original n vars only)
+        if state.basis_indices is not None:
+            basis = list(state.basis_indices)
+        else:
+            return {"chebyshev_radius_joint": 0.0, "chebyshev_radius_b_only": 0.0, "ratio": 0.0}
+
+        basis_set = set(basis)
+        nonbasic = [j for j in range(n) if j not in basis_set]
+
+        # Build G matrix: |N| × n
+        G = np.zeros((len(nonbasic), n))
+        c_bar = np.zeros(len(nonbasic))
+
+        c_B = np.array([problem.c[j] if j < n else 0.0 for j in basis])
+        y = c_B @ B_inv
+
+        for idx, j in enumerate(nonbasic):
+            a_j = A_aug[:, j]
+            B_inv_a_j = B_inv @ a_j
+            G[idx, j] = -1.0
+            for l in range(m_aug):
+                if basis[l] < n:
+                    G[idx, basis[l]] = B_inv_a_j[l]
+            # Reduced cost (for maximize, c̄_j ≤ 0 at optimality)
+            c_bar[idx] = abs(problem.c[j] - float(y @ a_j))
+
+        # OAT tolerances
+        oat_rhs = self._extract_oat_rhs(state, problem)
+        oat_obj = self._extract_oat_obj(state, problem)
+
+        alpha_b_plus = np.array([oat_rhs.get(cn, 1e6) for cn in problem.constraint_names[:m]])
+        alpha_b_minus = alpha_b_plus.copy()
+        alpha_c_plus = np.array([oat_obj.get(vn, 1e6) for vn in problem.var_names[:n]])
+        alpha_c_minus = alpha_c_plus.copy()
+
+        # --- Build H matrix ---
+        n_nb = len(nonbasic)
+        dim = m + n  # δ = (δ_b, δ_c)
+
+        rows_H, rows_h = [], []
+
+        # (1) Primal: -B⁻¹[:, :m] δ_b ≤ x_B
+        for i in range(m_aug):
+            row = np.zeros(dim)
+            for j in range(m):
+                row[j] = -B_inv[i, j]
+            rows_H.append(row)
+            rows_h.append(float(x_B[i]))
+
+        # (2) Dual: -G δ_c ≤ c̄
+        for idx in range(n_nb):
+            row = np.zeros(dim)
+            for j in range(n):
+                row[m + j] = -G[idx, j]
+            rows_H.append(row)
+            rows_h.append(float(c_bar[idx]))
+
+        # (3) Box δ_b
+        for j in range(m):
+            r_up = np.zeros(dim); r_up[j] = 1.0
+            r_lo = np.zeros(dim); r_lo[j] = -1.0
+            rows_H.append(r_up); rows_h.append(float(alpha_b_plus[j]))
+            rows_H.append(r_lo); rows_h.append(float(alpha_b_minus[j]))
+
+        # (4) Box δ_c
+        for j in range(n):
+            r_up = np.zeros(dim); r_up[m + j] = 1.0
+            r_lo = np.zeros(dim); r_lo[m + j] = -1.0
+            rows_H.append(r_up); rows_h.append(float(alpha_c_plus[j]))
+            rows_H.append(r_lo); rows_h.append(float(alpha_c_minus[j]))
+
+        H = np.array(rows_H)
+        h = np.array(rows_h)
+
+        r_joint, center = self._chebyshev_center(H, h)
+
+        # Also compute b-only radius for comparison
+        region_b = self.analyze(state, problem)
+        r_b = region_b.chebyshev_radius
+
+        ratio = r_joint / r_b if r_b > 1e-10 else 0.0
+
+        return {
+            "chebyshev_radius_joint": r_joint,
+            "chebyshev_radius_b_only": r_b,
+            "ratio": ratio,
+            "center_b": tuple(center[:m]) if center is not None else None,
+            "center_c": tuple(center[m:]) if center is not None else None,
+            "n_primal_rows": m_aug,
+            "n_dual_rows": n_nb,
+            "n_box_rows": 2 * m + 2 * n,
+        }
+
     def _extract_oat_rhs(self, state: SolveState, problem: LPProblem) -> dict[str, float]:
         """One-at-a-time RHS tolerances from sensitivity ranges."""
         result = {}
