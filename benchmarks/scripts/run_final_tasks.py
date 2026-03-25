@@ -88,14 +88,26 @@ def run_task1():
 # Task 2: Wendell tolerance
 # ============================================================
 
-def wendell_tolerance_rhs(B_inv, x_B, b):
-    """Wendell (1985) RHS tolerance."""
-    m = len(x_B)
-    t_values = np.full(m, np.inf)
-    for i in range(m):
-        denom = np.sum(np.abs(B_inv[i, :len(b)]) * np.abs(b))
+def wendell_tolerance_rhs(B_inv, x_B, b_orig):
+    """Wendell (1985) RHS tolerance using ORIGINAL problem coordinates.
+
+    t = min_i x_B_i / (Σ_j |B⁻¹_{ij}| · |b_j|)
+
+    Uses only the first m_orig columns of B_inv (original constraints),
+    since upper-bound slack rows have constant RHS.
+    Clamps x_B to non-negative to handle numerical degeneracy.
+    """
+    m_orig = len(b_orig)
+    m_aug = len(x_B)
+    # Use only original-problem columns of B_inv
+    B_inv_orig = B_inv[:, :m_orig]
+    x_B_safe = np.maximum(x_B, 0.0)  # clamp numerical negatives
+
+    t_values = np.full(m_aug, np.inf)
+    for i in range(m_aug):
+        denom = np.sum(np.abs(B_inv_orig[i]) * np.abs(b_orig))
         if denom > 1e-12:
-            t_values[i] = x_B[i] / denom
+            t_values[i] = x_B_safe[i] / denom
     return float(np.min(t_values)), int(np.argmin(t_values))
 
 
@@ -121,7 +133,7 @@ def run_task2():
             from clara.engine.simplex import RevisedSimplex as RS
             _, b_aug, _ = RS._add_upper_bound_rows(p)
             x_B = st.basis_inverse @ b_aug
-            t, _ = wendell_tolerance_rhs(st.basis_inverse, x_B, b_aug)
+            t, _ = wendell_tolerance_rhs(st.basis_inverse, x_B, p.b)  # original b
 
             region = analyzer.analyze(st, p)
             wendell_ts.append(t)
