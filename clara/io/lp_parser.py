@@ -617,9 +617,8 @@ class _LPParser:
         for coeff, var in self.obj_terms:
             c[var_idx[var]] = coeff
 
-        # If minimize, negate objective (LPProblem assumes maximize)
-        if self.sense == "minimize":
-            c = -c
+        # Store sense — engine handles negation internally
+        problem_sense = self.sense  # "maximize" or "minimize"
 
         # Separate constraints by type and convert >= to <=
         all_rows: list[np.ndarray] = []
@@ -687,6 +686,7 @@ class _LPParser:
             var_names=list(var_names),
             constraint_names=con_names,
             name=self.name,
+            sense=problem_sense,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             integer_vars=integer_indices,

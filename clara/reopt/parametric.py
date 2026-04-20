@@ -53,12 +53,15 @@ class ParametricLPSolver:
             delta_c: Objective change vector.
         """
         start = time.perf_counter()
-        m, n = old_problem.A.shape
-        N = n + m  # decision + slack
+        from clara.engine.simplex import RevisedSimplex as _RS
+        _, n = old_problem.A.shape
 
-        # Augmented system
-        A_full = np.hstack([old_problem.A, np.eye(m)])
-        b0 = old_problem.b.copy()
+        # Build augmented system matching B_inv dimensions (includes UB rows)
+        A_aug, b0, _ = _RS._add_upper_bound_rows(old_problem)
+        m = A_aug.shape[0]  # augmented constraint count
+        N = n + m
+
+        A_full = np.hstack([A_aug, np.eye(m)])
 
         # Full cost vectors (decision + slack)
         c0_full = np.zeros(N)
@@ -66,7 +69,10 @@ class ParametricLPSolver:
         dc_full = np.zeros(N)
         dc_full[:n] = delta_c
 
-        db = np.asarray(delta_b, dtype=float)
+        # Pad delta_b to augmented size (UB rows have delta=0)
+        db_orig = np.asarray(delta_b, dtype=float)
+        db = np.zeros(m)
+        db[:len(db_orig)] = db_orig
 
         # Extract basis from old state
         B_inv = old_state.basis_inverse.copy()
@@ -303,15 +309,18 @@ class ParametricLPSolver:
 
     def _extract_basis(self, state: SolveState, problem: LPProblem) -> list[int]:
         """Extract basis indices by matching B⁻¹ columns to [A|I]."""
-        n, m = problem.num_variables, problem.num_constraints
+        from clara.engine.simplex import RevisedSimplex as _RS
+        n = problem.num_variables
         B_inv = state.basis_inverse
         B = np.linalg.inv(B_inv)
-        A_full = np.hstack([problem.A, np.eye(m)])
+        A_aug, _, _ = _RS._add_upper_bound_rows(problem)
+        m_aug = A_aug.shape[0]
+        A_full = np.hstack([A_aug, np.eye(m_aug)])
 
         basis = []
-        for col_idx in range(m):
+        for col_idx in range(m_aug):
             b_col = B[:, col_idx]
-            best_j = min(range(n + m), key=lambda j: np.linalg.norm(A_full[:, j] - b_col))
+            best_j = min(range(n + m_aug), key=lambda j: np.linalg.norm(A_full[:, j] - b_col))
             basis.append(best_j)
         return basis
 

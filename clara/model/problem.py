@@ -25,6 +25,7 @@ class LPProblem:
     var_names: list[str] = field(default_factory=list)
     constraint_names: list[str] = field(default_factory=list)
     name: str = ""
+    sense: str = "maximize"  # "maximize" or "minimize"
     lower_bounds: np.ndarray | None = None
     upper_bounds: np.ndarray | None = None
     integer_vars: set[int] = field(default_factory=set)
@@ -60,3 +61,15 @@ class LPProblem:
     @property
     def has_integers(self) -> bool:
         return bool(self.integer_vars or self.binary_vars)
+
+    def as_lp(self) -> "LPProblem":
+        """Return LP relaxation: same problem with integrality constraints removed."""
+        return LPProblem(
+            c=self.c.copy(), A=self.A.copy(), b=self.b.copy(),
+            var_names=list(self.var_names),
+            constraint_names=list(self.constraint_names),
+            name=self.name, sense=self.sense,
+            lower_bounds=self.lower_bounds.copy() if self.lower_bounds is not None else None,
+            upper_bounds=self.upper_bounds.copy() if self.upper_bounds is not None else None,
+            integer_vars=set(), binary_vars=set(),
+        )

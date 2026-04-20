@@ -54,10 +54,16 @@ class RevisedSimplex:
 
     def __init__(self, problem: LPProblem) -> None:
         self.problem = problem
-        m, n = problem.A.shape
-        self.m = m  # number of constraints
-        self.n = n  # number of decision variables
-        self.N = n + m  # total variables (decision + slack)
+
+        # Add upper bound constraints for finite upper bounds
+        # (simplex only handles Ax <= b, x >= 0 natively)
+        A, b, con_names = self._add_upper_bound_rows(problem)
+
+        m = A.shape[0]
+        n = problem.A.shape[1]
+        self.m = m
+        self.n = n
+        self.N = n + m
 
         # Full variable names: x1..xn, y1..ym (slacks)
         self.all_var_names = list(problem.var_names) + [
@@ -65,23 +71,56 @@ class RevisedSimplex:
         ]
 
         # Objective: decision vars have cost c_j, slacks have cost 0
+        # For minimize: negate c internally (simplex always maximizes)
         self.c_full = np.zeros(self.N)
-        self.c_full[:n] = problem.c
+        if problem.sense == "minimize":
+            self.c_full[:n] = -problem.c
+        else:
+            self.c_full[:n] = problem.c
 
         # Constraint matrix: [A | I]
-        self.A_full = np.hstack([problem.A, np.eye(m)])
+        self.A_full = np.hstack([A, np.eye(m)])
 
         # RHS
-        self.b = problem.b.copy()
+        self.b = b.copy()
 
         # Initial basis: slack variables (indices n, n+1, ..., n+m-1)
         self.basis = list(range(n, n + m))
 
         # B⁻¹ starts as identity (basis = slacks)
         self.B_inv = np.eye(m)
+        self._warm_started = False
 
         # History
         self.iterations: list[IterationSnapshot] = []
+
+    @staticmethod
+    def _add_upper_bound_rows(problem: LPProblem):
+        """Add x_j <= ub as explicit constraints for finite upper bounds."""
+        n = problem.A.shape[1]
+        extra_rows = []
+        extra_rhs = []
+        extra_names = []
+        if problem.upper_bounds is not None:
+            for j in range(n):
+                ub = problem.upper_bounds[j]
+                if np.isfinite(ub):
+                    row = np.zeros(n)
+                    row[j] = 1.0
+                    extra_rows.append(row)
+                    extra_rhs.append(ub)
+                    extra_names.append(f"ub_{problem.var_names[j]}")
+
+        if extra_rows:
+            A = np.vstack([problem.A] + extra_rows)
+            b = np.concatenate([problem.b, extra_rhs])
+            names = list(problem.constraint_names) + extra_names
+        else:
+            A = problem.A
+            b = problem.b
+            names = list(problem.constraint_names)
+
+        return A, b, names
 
     @classmethod
     def from_warm_start(
@@ -103,14 +142,15 @@ class RevisedSimplex:
         solver = cls(problem)
         solver.basis = list(basis)
         solver.B_inv = basis_inverse.copy()
+        solver._warm_started = True
         return solver
 
     def solve(self) -> SolveState:
         """Run Revised Simplex and return a SolveState."""
         start_time = time.perf_counter()
 
-        # Handle negative RHS via Big-M Phase I
-        if np.any(self.b < -PIVOT_TOL):
+        # Handle negative RHS via Big-M Phase I (skip if warm-started with valid basis)
+        if not self._warm_started and np.any(self.b < -PIVOT_TOL):
             return self._solve_with_bigm(start_time)
 
         status = self._simplex_loop()
@@ -122,9 +162,6 @@ class RevisedSimplex:
 
         Performs pricing, ratio test, pivot, and records IterationSnapshots.
         Modifies self.B_inv, self.basis, self.iterations in place.
-
-        Returns:
-            SolveStatus indicating outcome (OPTIMAL, UNBOUNDED, ITERATION_LIMIT).
         """
         for iteration in range(1, MAX_ITERATIONS + 1):
             x_B = self.B_inv @ self.b
@@ -419,8 +456,10 @@ class RevisedSimplex:
         for i, j in enumerate(self.basis):
             x_full[j] = x_B[i]
 
-        # Optimal value
+        # Optimal value (un-negate for minimize problems)
         optimal_value = float(self.c_full @ x_full)
+        if self.problem.sense == "minimize":
+            optimal_value = -optimal_value
 
         # Dual variables (shadow prices): y = c_B^T B⁻¹
         c_B = self.c_full[self.basis]
@@ -451,14 +490,15 @@ class RevisedSimplex:
                 obj_coeff_range=obj_ranges.get(var_name, (float('-inf'), float('inf'))),
             ))
 
-        # Build ConstraintInfo
+        # Build ConstraintInfo (only original constraints, not upper bound rows)
+        orig_m = self.problem.num_constraints
         constraints = []
-        for i in range(m):
+        for i in range(orig_m):
             con_name = self.problem.constraint_names[i]
             slack_val = float(x_full[n + i])
             constraints.append(ConstraintInfo(
                 name=con_name,
-                rhs=float(self.problem.b[i]),
+                rhs=float(self.problem.b[i]) if i < len(self.problem.b) else 0.0,
                 slack=slack_val,
                 dual_value=float(y[i]),
                 is_binding=abs(slack_val) < OPTIMALITY_TOL,
@@ -474,6 +514,13 @@ class RevisedSimplex:
             rhs_ranges={c.name: c.rhs_range for c in constraints},
         )
 
+        # Numerical diagnostics
+        cond_num = float(np.linalg.cond(self.B_inv)) if self.B_inv.shape[0] > 0 else 0.0
+        degen_count = int(np.sum(x_B < 1e-8))
+        row_norms = np.linalg.norm(self.B_inv, axis=1)
+        safe_norms = np.where(row_norms > 1e-12, row_norms, np.inf)
+        d0 = float(np.min(x_B / safe_norms))
+
         return SolveState(
             status=SolveStatus.OPTIMAL,
             optimal_value=optimal_value,
@@ -484,7 +531,11 @@ class RevisedSimplex:
             solve_time_seconds=elapsed,
             iteration_count=len(self.iterations),
             basis_inverse=self.B_inv.copy(),
+            basis_indices=tuple(self.basis),
             iteration_history=tuple(self.iterations),
+            condition_number=cond_num,
+            degenerate_count=degen_count,
+            basis_robustness_d0=d0,
             problem_name=self.problem.name,
             variable_names=tuple(self.problem.var_names),
             constraint_names=tuple(self.problem.constraint_names),
@@ -561,7 +612,8 @@ class RevisedSimplex:
         x_B = self.B_inv @ self.b
         ranges: dict[str, tuple[float, float]] = {}
 
-        for i in range(self.m):
+        orig_m = len(self.problem.constraint_names)
+        for i in range(min(self.m, orig_m)):
             con_name = self.problem.constraint_names[i]
             col = self.B_inv[:, i]  # i-th column of B⁻¹
 

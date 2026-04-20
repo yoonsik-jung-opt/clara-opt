@@ -169,6 +169,134 @@ class ReoptResult:
 
 
 # ============================================================
+# Attribution result
+# ============================================================
+
+@dataclass(frozen=True)
+class AttributionResult:
+    """Decomposition of objective change into parameter contributions."""
+    delta_z: float
+    rhs_effect: float       # yᵀΔb (first-order)
+    obj_effect: float       # Δcᵀx (first-order)
+    interaction_effect: float  # Δc_Bᵀ B⁻¹ Δb
+    first_order_residual: float
+
+    rhs_contributions: dict[str, float]   # per-constraint: y_i * Δb_i
+    obj_contributions: dict[str, float]   # per-variable: Δc_j * x_j
+
+    shapley_b: Optional[float] = None
+    shapley_c: Optional[float] = None
+    z_b_only: Optional[float] = None
+    z_c_only: Optional[float] = None
+
+    basis_preserved: bool = False
+    nonlinearity: float = 0.0
+
+    @property
+    def summary(self) -> str:
+        parts = []
+        if abs(self.delta_z) > 1e-10:
+            rhs_pct = self.rhs_effect / self.delta_z * 100
+            obj_pct = self.obj_effect / self.delta_z * 100
+            int_pct = self.interaction_effect / self.delta_z * 100
+            parts.append(f"RHS changes contributed {rhs_pct:.1f}%.")
+            parts.append(f"Objective changes contributed {obj_pct:.1f}%.")
+            if abs(self.interaction_effect) > 1e-10:
+                parts.append(f"Interaction term: {int_pct:.1f}%.")
+        if self.shapley_b is not None and self.shapley_c is not None:
+            sb = self.shapley_b / self.delta_z * 100 if abs(self.delta_z) > 1e-10 else 0
+            sc = self.shapley_c / self.delta_z * 100 if abs(self.delta_z) > 1e-10 else 0
+            parts.append(f"Shapley: Δb = {sb:.1f}%, Δc = {sc:.1f}%.")
+        if self.basis_preserved:
+            parts.append("First-order decomposition is exact (basis preserved).")
+        return " ".join(parts)
+
+
+# ============================================================
+# Sensitivity region
+# ============================================================
+
+@dataclass(frozen=True)
+class SensitivityRegion:
+    """Simultaneous sensitivity region analysis."""
+    chebyshev_radius: float
+    chebyshev_center: Optional[tuple]
+    min_oat_tolerance: float
+    simultaneity_ratio: float  # chebyshev / min_oat
+
+    oat_rhs_tolerances: dict[str, float]
+    oat_obj_tolerances: dict[str, float]
+
+    projections: Optional[dict] = None  # {(i, j): [(x, y), ...]}
+
+    @property
+    def summary(self) -> str:
+        r = self.chebyshev_radius
+        oat = self.min_oat_tolerance
+        ratio = self.simultaneity_ratio
+        return (
+            f"Chebyshev radius: {r:.4f}. "
+            f"Min one-at-a-time tolerance: {oat:.4f}. "
+            f"Simultaneity ratio: {ratio:.4f}. "
+            f"One-at-a-time analysis overestimates the safe region by "
+            f"{1/max(ratio, 1e-10):.1f}x."
+        )
+
+
+# ============================================================
+# MIP bound result
+# ============================================================
+
+@dataclass(frozen=True)
+class MIPBoundResult:
+    """Opportunity cost bound for MIP reoptimization decision.
+
+    B = z'*_LP - c'^T x*  (LP relaxation bound, Theorem 2)
+    """
+    decision: str          # "skip" | "reoptimize" | "infeasible"
+    reason: str
+
+    bound: float           # B = z'*_LP - c'^T x*
+    bound_ratio: float     # B / |z'*_LP|
+
+    bound_corrected: Optional[float]        # gap-corrected estimate
+    bound_corrected_ratio: Optional[float]
+
+    original_integrality_gap: float  # z*_LP - z*_MIP
+    gap_ratio: float                 # gap / |z*_LP|
+
+    z_mip_old: float
+    z_lp_old: float
+    z_lp_new: Optional[float]
+    c_new_x_old: float       # c'^T x*
+
+    old_solution_feasible: bool
+    max_violation: float
+
+    within_lp_sensitivity: bool
+    lp_solve_needed: bool
+
+    oguz_relative_bound: Optional[float]   # 2δ/(1+δ)
+    delta: Optional[float]                 # max |Δc_j/c_j|
+
+    @property
+    def summary(self) -> str:
+        lines = [f"Decision: {self.decision}"]
+        lines.append(f"Bound B = {self.bound:.4f} ({self.bound_ratio:.1%} of LP optimal)")
+        if self.bound_corrected is not None:
+            lines.append(f"Gap-corrected: B_c = {self.bound_corrected:.4f}")
+        lines.append(f"Integrality gap: {self.original_integrality_gap:.4f} ({self.gap_ratio:.1%})")
+        if not self.old_solution_feasible:
+            lines.append(f"Old solution INFEASIBLE (max violation: {self.max_violation:.4f})")
+        if self.within_lp_sensitivity:
+            lines.append("Within LP sensitivity — no LP re-solve needed")
+        if self.oguz_relative_bound is not None:
+            lines.append(f"Oguz bound: {self.oguz_relative_bound:.4f} (δ = {self.delta:.4f})")
+        lines.append(f"Reason: {self.reason}")
+        return "\n".join(lines)
+
+
+# ============================================================
 # Parametric LP structures
 # ============================================================
 
@@ -269,6 +397,7 @@ class DiffReport:
 
     summary: str
     old_var_names: tuple[str, ...] = ()
+    attribution: Optional["AttributionResult"] = None
 
     def to_text(self) -> str:
         """Full text diff report."""
@@ -344,6 +473,31 @@ class DiffReport:
                     lines.append(f"  {cc.name}: binding \u2192 non-binding")
             lines.append("")
 
+        # Attribution
+        if self.attribution is not None:
+            a = self.attribution
+            lines.append("ATTRIBUTION")
+            if abs(a.delta_z) > 1e-10:
+                rhs_pct = a.rhs_effect / a.delta_z * 100
+                obj_pct = a.obj_effect / a.delta_z * 100
+                int_pct = a.interaction_effect / a.delta_z * 100
+                lines.append(f"  RHS changes: {a.rhs_effect:+.4f} ({rhs_pct:.1f}%)")
+                for name, val in sorted(a.rhs_contributions.items(), key=lambda x: -abs(x[1])):
+                    if abs(val) > 1e-6:
+                        lines.append(f"    {name}: {val:+.4f}")
+                lines.append(f"  Objective changes: {a.obj_effect:+.4f} ({obj_pct:.1f}%)")
+                for name, val in sorted(a.obj_contributions.items(), key=lambda x: -abs(x[1])):
+                    if abs(val) > 1e-6:
+                        lines.append(f"    {name}: {val:+.4f}")
+                if abs(a.interaction_effect) > 1e-6:
+                    lines.append(f"  Interaction: {a.interaction_effect:+.4f} ({int_pct:.1f}%)")
+            if a.shapley_b is not None and a.shapley_c is not None:
+                sb = a.shapley_b / a.delta_z * 100 if abs(a.delta_z) > 1e-10 else 0
+                sc = a.shapley_c / a.delta_z * 100 if abs(a.delta_z) > 1e-10 else 0
+                lines.append(f"  Shapley: \u0394b = {a.shapley_b:.4f} ({sb:.1f}%), "
+                             f"\u0394c = {a.shapley_c:.4f} ({sc:.1f}%)")
+            lines.append("")
+
         # Bottleneck
         lines.append("BOTTLENECK SHIFT")
         if self.bottleneck_shifted:
@@ -355,7 +509,7 @@ class DiffReport:
 
     def to_dict(self) -> dict:
         """JSON-serializable dict."""
-        return {
+        d = {
             "change": {
                 "type": self.change.change_type.name,
                 "summary": self.change.summary,
@@ -396,6 +550,20 @@ class DiffReport:
                 "shifted": self.bottleneck_shifted,
             },
         }
+        if self.attribution is not None:
+            a = self.attribution
+            d["attribution"] = {
+                "delta_z": a.delta_z,
+                "rhs_effect": a.rhs_effect,
+                "obj_effect": a.obj_effect,
+                "interaction_effect": a.interaction_effect,
+                "rhs_contributions": a.rhs_contributions,
+                "obj_contributions": a.obj_contributions,
+                "shapley_b": a.shapley_b,
+                "shapley_c": a.shapley_c,
+                "basis_preserved": a.basis_preserved,
+            }
+        return d
 
     def to_json(self, indent: int = 2) -> str:
         import json
