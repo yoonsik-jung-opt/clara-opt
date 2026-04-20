@@ -244,6 +244,59 @@ class SensitivityRegion:
 
 
 # ============================================================
+# MIP bound result
+# ============================================================
+
+@dataclass(frozen=True)
+class MIPBoundResult:
+    """Opportunity cost bound for MIP reoptimization decision.
+
+    B = z'*_LP - c'^T x*  (LP relaxation bound, Theorem 2)
+    """
+    decision: str          # "skip" | "reoptimize" | "infeasible"
+    reason: str
+
+    bound: float           # B = z'*_LP - c'^T x*
+    bound_ratio: float     # B / |z'*_LP|
+
+    bound_corrected: Optional[float]        # gap-corrected estimate
+    bound_corrected_ratio: Optional[float]
+
+    original_integrality_gap: float  # z*_LP - z*_MIP
+    gap_ratio: float                 # gap / |z*_LP|
+
+    z_mip_old: float
+    z_lp_old: float
+    z_lp_new: Optional[float]
+    c_new_x_old: float       # c'^T x*
+
+    old_solution_feasible: bool
+    max_violation: float
+
+    within_lp_sensitivity: bool
+    lp_solve_needed: bool
+
+    oguz_relative_bound: Optional[float]   # 2δ/(1+δ)
+    delta: Optional[float]                 # max |Δc_j/c_j|
+
+    @property
+    def summary(self) -> str:
+        lines = [f"Decision: {self.decision}"]
+        lines.append(f"Bound B = {self.bound:.4f} ({self.bound_ratio:.1%} of LP optimal)")
+        if self.bound_corrected is not None:
+            lines.append(f"Gap-corrected: B_c = {self.bound_corrected:.4f}")
+        lines.append(f"Integrality gap: {self.original_integrality_gap:.4f} ({self.gap_ratio:.1%})")
+        if not self.old_solution_feasible:
+            lines.append(f"Old solution INFEASIBLE (max violation: {self.max_violation:.4f})")
+        if self.within_lp_sensitivity:
+            lines.append("Within LP sensitivity — no LP re-solve needed")
+        if self.oguz_relative_bound is not None:
+            lines.append(f"Oguz bound: {self.oguz_relative_bound:.4f} (δ = {self.delta:.4f})")
+        lines.append(f"Reason: {self.reason}")
+        return "\n".join(lines)
+
+
+# ============================================================
 # Parametric LP structures
 # ============================================================
 
