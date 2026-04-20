@@ -57,7 +57,7 @@ class Reoptimizer:
             return self._no_action(old_state, new_problem, change)
         elif method == "recompute":
             return self._recompute(old_state, new_problem, change)
-        elif method == "warm_start":
+        elif method in ("warm_start", "warm_start_dual"):
             return self._warm_start(old_state, new_problem, change)
         elif method == "parametric_lp":
             return self._parametric_lp(old_state, new_problem, change, old_problem)
@@ -116,8 +116,11 @@ class Reoptimizer:
         if B_inv is None:
             return self._scratch(new_problem)
 
-        # Extract basis indices from old state
-        basis = self._extract_basis_indices(old_state, new_problem)
+        # Use stored basis indices if available
+        if old_state.basis_indices is not None:
+            basis = list(old_state.basis_indices)
+        else:
+            basis = self._extract_basis_indices(old_state, new_problem)
         n = new_problem.num_variables
         m = new_problem.num_constraints
 
@@ -214,10 +217,19 @@ class Reoptimizer:
         if B_inv is None:
             return self._scratch(new_problem)
 
-        basis = self._extract_basis_indices(old_state, new_problem)
+        # Check dimension compatibility: B_inv must match new problem's augmented size
+        A_aug, _, _ = RevisedSimplex._add_upper_bound_rows(new_problem)
+        if B_inv.shape[0] != A_aug.shape[0]:
+            return self._scratch(new_problem)
+
+        # Use stored basis indices if available, otherwise extract heuristically
+        if old_state.basis_indices is not None:
+            basis = list(old_state.basis_indices)
+        else:
+            basis = self._extract_basis_indices(old_state, new_problem)
         solver = RevisedSimplex.from_warm_start(new_problem, basis, B_inv)
 
-        x_B = B_inv @ new_problem.b
+        x_B = B_inv @ solver.b
         primal_infeasible = bool(np.any(x_B < -1e-8))
 
         if primal_infeasible and solver._is_dual_feasible():
@@ -306,16 +318,24 @@ class Reoptimizer:
         except np.linalg.LinAlgError:
             return self._extract_basis_heuristic(state, problem)
 
-        # Build augmented [A|I]
-        A_full = np.hstack([problem.A, np.eye(m)])
+        # Build augmented [A|I] matching B_inv dimensions
+        A_aug, b_aug, _ = RevisedSimplex._add_upper_bound_rows(problem)
+        m_aug = A_aug.shape[0]
+
+        # If B_inv dimensions don't match, fall back to heuristic
+        if B_inv.shape[0] != m_aug:
+            return self._extract_basis_heuristic(state, problem)
+
+        A_full = np.hstack([A_aug, np.eye(m_aug)])
+        N_full = n + m_aug
 
         # For each column of B, find matching column in A_full
         basis = []
-        for col_idx in range(m):
+        for col_idx in range(m_aug):
             b_col = B[:, col_idx]
             best_j = -1
             best_err = float("inf")
-            for j in range(n + m):
+            for j in range(N_full):
                 err = np.linalg.norm(A_full[:, j] - b_col)
                 if err < best_err:
                     best_err = err

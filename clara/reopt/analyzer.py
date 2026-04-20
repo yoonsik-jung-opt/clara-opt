@@ -191,13 +191,16 @@ class ImpactAnalyzer:
                     tol_up = abs((hi - c_j) / c_j) if not math.isinf(hi) else float("inf")
                     alpha = min(alpha, tol_down, tol_up)
 
-        if math.isinf(alpha):
+        if math.isinf(delta) or math.isinf(alpha):
             tightened_bound = raw_bound
         elif delta <= alpha:
             tightened_bound = 0.0
         else:
             delta_prime = (delta - alpha) / (1 + alpha)
-            tightened_bound = 2 * delta_prime / (1 + delta_prime)
+            if math.isinf(delta_prime):
+                tightened_bound = raw_bound
+            else:
+                tightened_bound = 2 * delta_prime / (1 + delta_prime)
 
         explanation = (
             f"Oguz bound: δ = {delta:.4f}, raw bound = {raw_bound:.4f} "

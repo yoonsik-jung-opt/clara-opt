@@ -43,9 +43,10 @@ class TestBasicParsing:
         np.testing.assert_array_almost_equal(p.c, [3])
 
     def test_parse_minimize_sense(self):
-        """Minimize should negate the objective (LPProblem is max-form)."""
+        """Minimize stores original c and sense='minimize'."""
         p = parse_lp("Minimize\n obj: 3 x1\nSubject To\n c1: x1 <= 10\nEnd\n")
-        np.testing.assert_array_almost_equal(p.c, [-3])
+        np.testing.assert_array_almost_equal(p.c, [3])
+        assert p.sense == "minimize"
 
     def test_parse_minimal(self):
         p = read_lp(FIXTURES / "parser_minimal.lp")
