@@ -67,6 +67,12 @@ benchmarks/results/*
 benchmarks/instances/random/*.lp
 benchmarks/instances/perturbations/**/*.lp
 
+# Paper directories (not part of the package)
+paper/
+paper_ejor/
+paper_eswa/
+paper_mpc/
+
 # OS
 .DS_Store
 Thumbs.db

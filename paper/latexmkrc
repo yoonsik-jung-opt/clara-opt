@@ -1,3 +1,0 @@
-$pdf_mode = 5;  # use xelatex
-$postscript_mode = 0;
-$dvi_mode = 0;
