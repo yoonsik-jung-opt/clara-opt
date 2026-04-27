@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "clara-opt"
 version = "0.1.0"
-description = "A white-box optimization solver that explains why solutions are optimal, when reoptimization is needed, and what changed."
+description = "Solver-intrinsic explanations and reoptimization for linear programming"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -13,12 +13,13 @@ authors = [
     { name = "Yoonsik Yang" },
 ]
 keywords = [
-    "optimization",
     "linear-programming",
-    "explainability",
-    "reoptimization",
+    "optimization",
     "sensitivity-analysis",
-    "operations-research",
+    "explainable-optimization",
+    "counterfactual-explanations",
+    "reoptimization",
+    "simplex-method",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -32,6 +33,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Information Analysis",
     "Typing :: Typed",
 ]
 

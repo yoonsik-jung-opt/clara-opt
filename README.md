@@ -3,20 +3,33 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
 
-A white-box optimization solver that explains why solutions are optimal,
-when reoptimization is needed, and what changed.
+A solver-intrinsic explanation framework for linear programming. CLARA extracts
+explanations directly from the simplex basis inverse $B^{-1}$ — without machine
+learning surrogates, without inverse formulations — and unifies factual and
+counterfactual perspectives on LP explainability within a single geometric framework.
 
-## Features
+## What CLARA does
 
-- **Solver-intrinsic explanations** — not post-hoc ML surrogate, but direct
-  interpretation of basis, dual values, and sensitivity ranges
-- **Dual backend** — Internal Revised Simplex (full transparency, step-by-step trace)
-  or HiGHS (performance for large problems)
-- **Three explanation levels** mapped to the XAIOR framework (De Bock et al., 2024):
-  - *Understandability*: Which constraints are binding? What resources are fully used?
-  - *Justifiability*: Why is each variable at this value? What's the reduced cost?
-  - *Actionability*: What can change without breaking the solution? Where to invest?
-- **CLI and Python API** — `clara explain problem.lp` or import as library
+CLARA contributes two central capabilities, complemented by two supporting modules:
+
+- **Factual–counterfactual duality** — a formal bound showing that the basis
+  robustness $d_0$, computable in $O(mn)$ time from $B^{-1}$ alone, lower-bounds
+  the cost of any basis-changing counterfactual explanation. Connects classical
+  sensitivity analysis with counterfactual explanations for optimization.
+- **Reoptimization pipeline** — automatic change detection, Oguz-bound impact
+  analysis, warm-start method selection (primal simplex, dual simplex, or
+  parametric LP), and structured diff reports.
+- **Simultaneous sensitivity regions** (supporting) — Chebyshev center of the
+  basis-preserving polyhedron, the geometric foundation of the duality bound.
+- **Objective-change attribution** (supporting) — first-order and Shapley
+  decomposition that annotates diff reports during reoptimization.
+
+CLARA also offers two solver backends:
+
+- **Internal Revised Simplex** — full transparency, retains $B^{-1}$ at every
+  pivot for downstream analysis (practical for $n \le 100$).
+- **HiGHS** — production-grade reference solver; CLARA reconstructs $B^{-1}$
+  from the reported basis for larger problems.
 
 ## Installation
 
@@ -69,19 +82,27 @@ print(report.to_text())
 
 ## Roadmap
 
-- [x] v0.1.0 — LP solver + explainer + CLI (you are here)
-- [ ] v0.5.0 — MIP (Branch-and-Bound), counterfactual analysis, TUI
+- [x] v0.1.0 — LP solver, basis-inverse extraction, explanation modules, CLI
+- [ ] v0.5.0 — MIP (Branch-and-Bound), counterfactual computation via $d_0$
+  warm-start, TUI
 - [ ] v1.0.0 — Incremental reoptimization, parametric LP, streaming
-- [ ] v2.0.0 — LLM hybrid explanations, web UI
+- [ ] v2.0.0 — LLM-augmented natural-language explanations, web UI
 
 ## Academic Use
 
-CLARA fills a gap identified in the XAIOR framework (De Bock et al., 2024, EJOR):
-explainable AI for mathematical optimization solvers. If you use CLARA in research,
-please cite:
+CLARA contributes to the explainability of mathematical optimization solvers,
+a research area surveyed by De Bock et al. (2024) in the XAIOR framework. If
+you use CLARA in research, please cite:
 
-```
-(citation TBD — paper in preparation for Mathematical Programming Computation)
+```bibtex
+@article{jung2026clara,
+  title   = {CLARA: Factual--Counterfactual Duality and Reoptimization for
+             Linear Programming},
+  author  = {Jung, Yoonsik},
+  journal = {European Journal of Operational Research},
+  year    = {2026},
+  note    = {Under review}
+}
 ```
 
 ## License
