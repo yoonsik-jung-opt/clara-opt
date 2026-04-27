@@ -80,14 +80,6 @@ report = Explainer().explain(state, problem=problem)
 print(report.to_text())
 ```
 
-## Roadmap
-
-- [x] v0.1.0 — LP solver, basis-inverse extraction, explanation modules, CLI
-- [ ] v0.5.0 — MIP (Branch-and-Bound), counterfactual computation via $d_0$
-  warm-start, TUI
-- [ ] v1.0.0 — Incremental reoptimization, parametric LP, streaming
-- [ ] v2.0.0 — LLM-augmented natural-language explanations, web UI
-
 ## Academic Use
 
 CLARA contributes to the explainability of mathematical optimization solvers,
