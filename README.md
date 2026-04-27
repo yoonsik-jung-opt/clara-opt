@@ -91,19 +91,10 @@ print(report.to_text())
 ## Academic Use
 
 CLARA contributes to the explainability of mathematical optimization solvers,
-a research area surveyed by De Bock et al. (2024) in the XAIOR framework. If
-you use CLARA in research, please cite:
+a research area surveyed by De Bock et al. (2024) in the XAIOR framework.
 
-```bibtex
-@article{jung2026clara,
-  title   = {CLARA: Factual--Counterfactual Duality and Reoptimization for
-             Linear Programming},
-  author  = {Jung, Yoonsik},
-  journal = {European Journal of Operational Research},
-  year    = {2026},
-  note    = {Under review}
-}
-```
+A manuscript describing the framework is in preparation. Citation information
+will be added here when a preprint or peer-reviewed version is available.
 
 ## License
 

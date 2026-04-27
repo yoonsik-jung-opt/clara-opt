@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-04-27
+
+### Changed
+- Repositioned package framing around factual-counterfactual duality
+  and reoptimization (manuscript in preparation)
+- Updated package description and keywords for PyPI discoverability
+- Updated README to reflect new positioning
+
+### Added
+- "explainable-optimization" and "counterfactual-explanations" keywords
+- "Topic :: Scientific/Engineering :: Information Analysis" classifier
+
+### Note
+- No API changes — fully backward compatible
+
 ## [0.2.0] - 2026-04-27
 
 ### Added
@@ -23,10 +38,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basis indices stored in SolveState for reliable warm-start
 
 ### Changed
-- Package description updated for EJOR paper positioning
-- Keywords and classifiers updated to reflect explainable optimization focus
+- Repositioned package framing around factual-counterfactual duality
+  and reoptimization (paper submitted to EJOR)
+- Updated package description and keywords for PyPI discoverability
+- Updated README to reflect new positioning
 - HiGHS backend now passes upper/lower bounds correctly
 - Sensitivity analysis uses augmented system dimensions consistently
+
+### Added (packaging)
+- "explainable-optimization", "counterfactual-explanations" keywords
+- "Topic :: Scientific/Engineering :: Information Analysis" classifier
 
 ### Fixed
 - Warm-start basis extraction: uses stored basis_indices instead of heuristic
