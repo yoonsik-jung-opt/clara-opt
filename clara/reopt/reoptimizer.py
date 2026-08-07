@@ -134,7 +134,7 @@ class Reoptimizer:
         m = new_problem.num_constraints
 
         # Recompute basic variable values (pad RHS to augmented size)
-        _, b_aug_new, _ = standard_form.add_upper_bound_rows(new_problem)
+        A_aug_new, b_aug_new, _ = standard_form.add_upper_bound_rows(new_problem)
         if B_inv.shape[0] != len(b_aug_new):
             return self._scratch(new_problem)
         x_B_new = B_inv @ b_aug_new
@@ -166,7 +166,7 @@ class Reoptimizer:
                 name=new_problem.var_names[j],
                 value=float(x_full[j]),
                 basis_status=BasisStatus.BASIC if j in basis_set else BasisStatus.NONBASIC_LOWER,
-                reduced_cost=0.0 if j in basis_set else float(c_full[j] - y @ new_problem.A[:, j]),
+                reduced_cost=0.0 if j in basis_set else float(c_full[j] - y @ A_aug_new[:, j]),
                 obj_coeff_range=old_state.sensitivity.obj_coeff_ranges.get(
                     new_problem.var_names[j], (float("-inf"), float("inf"))
                 ),

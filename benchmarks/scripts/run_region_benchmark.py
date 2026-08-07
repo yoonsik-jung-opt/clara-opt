@@ -115,7 +115,7 @@ def main():
     if manifest.exists():
         with open(manifest) as fh:
             for row in csv.DictReader(fh):
-                if row.get("match", "").strip() == "✓" and int(row["n_vars"]) <= 50:
+                if row.get("match", "").strip() == "✓":
                     lp = RANDOM_DIR / f"{row['instance']}.lp"
                     if lp.exists():
                         files.append(lp)
