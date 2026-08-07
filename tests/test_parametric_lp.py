@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.model.problem import LPProblem
 from clara.reopt.analyzer import ImpactAnalyzer
 from clara.reopt.detector import ChangeDetector
@@ -36,7 +36,7 @@ DELTA_C = np.array([5, 2, 2], dtype=float)
 
 @pytest.fixture
 def base_state():
-    return RevisedSimplex(albici_base()).solve()
+    return HiGHSBackend().solve(albici_base())
 
 
 @pytest.fixture
@@ -89,7 +89,7 @@ class TestFullSolve:
         assert param_result.new_state.variable_values_dict["x3"] < TOL
 
     def test_matches_scratch(self, param_result):
-        scratch = RevisedSimplex(albici_compound()).solve()
+        scratch = HiGHSBackend().solve(albici_compound())
         assert abs(param_result.new_state.optimal_value - scratch.optimal_value) < TOL_OPT
 
 
@@ -154,7 +154,7 @@ class TestReoptIntegration:
         result = Reoptimizer().reoptimize(
             base_state, albici_compound(), change, decision, old_problem=albici_base()
         )
-        scratch = RevisedSimplex(albici_compound()).solve()
+        scratch = HiGHSBackend().solve(albici_compound())
         assert abs(result.new_state.optimal_value - scratch.optimal_value) < TOL_OPT
 
 

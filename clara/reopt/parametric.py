@@ -53,21 +53,25 @@ class ParametricLPSolver:
             delta_c: Objective change vector.
         """
         start = time.perf_counter()
-        from clara.engine.simplex import RevisedSimplex as _RS
+        import clara.engine.standard_form as standard_form
         _, n = old_problem.A.shape
 
         # Build augmented system matching B_inv dimensions (includes UB rows)
-        A_aug, b0, _ = _RS._add_upper_bound_rows(old_problem)
+        A_aug, b0, _ = standard_form.add_upper_bound_rows(old_problem)
         m = A_aug.shape[0]  # augmented constraint count
         N = n + m
 
         A_full = np.hstack([A_aug, np.eye(m)])
 
+        # Internal max convention: negate costs for minimize problems,
+        # un-negate when reporting (sign s converts internal <-> native).
+        s = 1.0 if old_problem.sense == "maximize" else -1.0
+
         # Full cost vectors (decision + slack)
         c0_full = np.zeros(N)
-        c0_full[:n] = old_problem.c
+        c0_full[:n] = s * old_problem.c
         dc_full = np.zeros(N)
-        dc_full[:n] = delta_c
+        dc_full[:n] = s * delta_c
 
         # Pad delta_b to augmented size (UB rows have delta=0)
         db_orig = np.asarray(delta_b, dtype=float)
@@ -81,7 +85,7 @@ class ParametricLPSolver:
         var_names = list(old_problem.var_names) + [f"y{i+1}" for i in range(m)]
         breakpoints: list[ParametricBreakpoint] = []
         current_theta = 0.0
-        prev_obj = old_state.optimal_value
+        prev_obj = s * old_state.optimal_value  # internal convention
         monotone = True
 
         for _ in range(MAX_PIVOTS):
@@ -150,7 +154,7 @@ class ParametricLPSolver:
                 breakpoint_type=bp_type,
                 leaving_var=leaving_var,
                 entering_var=entering_var,
-                objective_value=obj_at_bp,
+                objective_value=s * obj_at_bp,  # native sense
                 basic_variables=tuple(var_names[j] for j in basis),
                 explanation=explanation,
             ))
@@ -160,7 +164,7 @@ class ParametricLPSolver:
         # Build final state at θ=1
         new_state = self._build_final_state(
             basis, B_inv, old_problem, b0, db, c0_full, dc_full, n, m, N,
-            time.perf_counter() - start, len(breakpoints),
+            time.perf_counter() - start, len(breakpoints), s,
         )
 
         elapsed = time.perf_counter() - start
@@ -284,7 +288,7 @@ class ParametricLPSolver:
     def _update_basis_inverse(
         self, B_inv: np.ndarray, d: np.ndarray, pivot_row: int, m: int
     ) -> None:
-        """Standard eta update (same as RevisedSimplex)."""
+        """Standard eta (product-form) update of the basis inverse."""
         pivot = d[pivot_row]
         B_inv[pivot_row] /= pivot
         for i in range(m):
@@ -308,12 +312,17 @@ class ParametricLPSolver:
         )
 
     def _extract_basis(self, state: SolveState, problem: LPProblem) -> list[int]:
-        """Extract basis indices by matching B⁻¹ columns to [A|I]."""
-        from clara.engine.simplex import RevisedSimplex as _RS
+        """Extract basis indices, preferring the stored ones."""
+        import clara.engine.standard_form as standard_form
+
+        if state.basis_indices is not None:
+            return list(state.basis_indices)
+
+        # Fallback: match B⁻¹ columns to [A|I]
         n = problem.num_variables
         B_inv = state.basis_inverse
         B = np.linalg.inv(B_inv)
-        A_aug, _, _ = _RS._add_upper_bound_rows(problem)
+        A_aug, _, _ = standard_form.add_upper_bound_rows(problem)
         m_aug = A_aug.shape[0]
         A_full = np.hstack([A_aug, np.eye(m_aug)])
 
@@ -326,18 +335,18 @@ class ParametricLPSolver:
 
     def _build_final_state(
         self, basis, B_inv, problem, b0, db, c0_full, dc_full,
-        n, m, N, elapsed, num_breakpoints,
+        n, m, N, elapsed, num_breakpoints, s=1.0,
     ) -> SolveState:
-        """Build SolveState at θ=1."""
+        """Build SolveState at θ=1 (values reported in native sense)."""
         b_final = b0 + db
-        c_final = c0_full[:n] + dc_full[:n]
+        c_final = c0_full[:n] + dc_full[:n]  # internal convention
         x_B = B_inv @ b_final
 
         x_full = np.zeros(N)
         for i, j in enumerate(basis):
             x_full[j] = x_B[i]
 
-        opt_val = float(c_final @ x_full[:n])
+        opt_val = s * float(c_final @ x_full[:n])  # native sense
 
         c_full_final = np.zeros(N)
         c_full_final[:n] = c_final
@@ -345,11 +354,13 @@ class ParametricLPSolver:
         y = c_B @ B_inv
 
         basis_set = set(basis)
-        A_full = np.hstack([problem.A, np.eye(m)])
+        import clara.engine.standard_form as standard_form
+        A_aug, _, _ = standard_form.add_upper_bound_rows(problem)
+        A_full = np.hstack([A_aug, np.eye(m)])
 
         variables = []
         for j in range(n):
-            rc = 0.0 if j in basis_set else float(c_full_final[j] - y @ A_full[:, j])
+            rc = 0.0 if j in basis_set else s * float(c_full_final[j] - y @ A_full[:, j])
             variables.append(VariableInfo(
                 name=problem.var_names[j],
                 value=float(x_full[j]),
@@ -359,13 +370,13 @@ class ParametricLPSolver:
             ))
 
         constraints = []
-        for i in range(m):
+        for i in range(problem.num_constraints):
             slack = float(x_full[n + i])
             constraints.append(ConstraintInfo(
                 name=problem.constraint_names[i],
                 rhs=float(b_final[i]),
                 slack=slack,
-                dual_value=float(y[i]),
+                dual_value=s * float(y[i]),
                 is_binding=abs(slack) < 1e-8,
                 basis_status=BasisStatus.BASIC if (n + i) in basis_set else BasisStatus.NONBASIC_UPPER,
                 rhs_range=(float("-inf"), float("inf")),
@@ -377,10 +388,11 @@ class ParametricLPSolver:
             variables=tuple(variables),
             constraints=tuple(constraints),
             sensitivity=SensitivityRanges({}, {}),
-            engine=EngineType.INTERNAL_SIMPLEX,
+            engine=EngineType.BASIS_ROUTINE,
             solve_time_seconds=elapsed,
             iteration_count=num_breakpoints,
             basis_inverse=B_inv.copy(),
+            basis_indices=tuple(basis),
             problem_name=problem.name,
             variable_names=tuple(problem.var_names),
             constraint_names=tuple(problem.constraint_names),

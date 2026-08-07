@@ -7,7 +7,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from clara.cli import main
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.model.problem import LPProblem
 from clara.reopt.analyzer import ImpactAnalyzer
 from clara.reopt.detector import ChangeDetector
@@ -56,7 +56,7 @@ def albici_columns():
 
 def run_pipeline(old_problem, new_problem):
     """Full pipeline: solve → detect → analyze → reoptimize → diff."""
-    old_state = RevisedSimplex(old_problem).solve()
+    old_state = HiGHSBackend().solve(old_problem)
     change = ChangeDetector().detect(old_problem, new_problem)
     decision = ImpactAnalyzer().analyze(old_state, change, old_problem)
     result = Reoptimizer().reoptimize(old_state, new_problem, change, decision, old_problem=old_problem)

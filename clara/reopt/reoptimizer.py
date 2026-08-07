@@ -1,7 +1,9 @@
-"""Warm-start Reoptimizer — reoptimize using the old solution's B⁻¹.
+"""Warm-start Reoptimizer — reoptimize using the old solution's basis.
 
-Implements the reoptimization procedures from Albici et al. (2010)
-with B⁻¹-based warm-start for the Internal Simplex engine.
+Routes each change type to the appropriate method: basis-preserving
+recompute (zero pivots), HiGHS advanced-basis warm-start with a forced
+primal or dual simplex strategy, the parametric tracer for compound
+changes, or a cold HiGHS solve as fallback.
 
 Pipeline position:
     Change Detector → Impact Analyzer → **Reoptimizer** → Diff Report
@@ -14,7 +16,12 @@ from typing import Optional
 
 import numpy as np
 
-from clara.engine.simplex import RevisedSimplex
+import clara.engine.standard_form as standard_form
+from clara.engine.highs_backend import (
+    HiGHSBackend,
+    SIMPLEX_STRATEGY_DUAL,
+    SIMPLEX_STRATEGY_PRIMAL,
+)
 from clara.model.problem import LPProblem
 from clara.model.solve_state import (
     BasisStatus,
@@ -26,6 +33,8 @@ from clara.model.solve_state import (
     VariableInfo,
 )
 from clara.reopt.types import ParameterChange, ReoptDecision, ReoptResult
+
+OPTIMALITY_TOL = 1e-8
 
 
 class Reoptimizer:
@@ -124,15 +133,19 @@ class Reoptimizer:
         n = new_problem.num_variables
         m = new_problem.num_constraints
 
-        # Recompute basic variable values
-        x_B_new = B_inv @ new_problem.b
+        # Recompute basic variable values (pad RHS to augmented size)
+        _, b_aug_new, _ = standard_form.add_upper_bound_rows(new_problem)
+        if B_inv.shape[0] != len(b_aug_new):
+            return self._scratch(new_problem)
+        x_B_new = B_inv @ b_aug_new
 
         # Verify feasibility
         if np.any(x_B_new < -1e-8):
             return self._warm_start(old_state, new_problem, change)
 
-        # Build full solution
-        N = n + m  # decision + slack variables
+        # Build full solution over the augmented column space
+        m_aug = B_inv.shape[0]
+        N = n + m_aug  # decision + slack variables (incl. UB-row slacks)
         x_full = np.zeros(N)
         for i, j in enumerate(basis):
             x_full[j] = x_B_new[i]
@@ -182,10 +195,11 @@ class Reoptimizer:
             variables=tuple(variables),
             constraints=tuple(constraints),
             sensitivity=old_state.sensitivity,
-            engine=EngineType.INTERNAL_SIMPLEX,
+            engine=EngineType.BASIS_ROUTINE,
             solve_time_seconds=elapsed,
             iteration_count=0,
             basis_inverse=B_inv,
+            basis_indices=tuple(basis),
             iteration_history=(),
             problem_name=new_problem.name or old_state.problem_name,
             variable_names=tuple(new_problem.var_names),
@@ -207,18 +221,21 @@ class Reoptimizer:
         new_problem: LPProblem,
         change: ParameterChange,
     ) -> ReoptResult:
-        """Warm-start simplex from the old basis.
+        """Warm-start HiGHS from the old basis (advanced basis).
 
-        For Type R (primal infeasible, dual feasible): dual simplex warm-start.
-        For Type C (primal feasible, dual infeasible): primal simplex warm-start.
-        For Type RC or both infeasible: scratch fallback.
+        For Type R (primal infeasible, dual feasible): dual simplex.
+        For Type C (primal feasible): primal simplex.
+        For both infeasible: scratch fallback.
+        The feasibility classification is computed from the retained
+        B⁻¹; the pivoting itself is delegated to HiGHS, started from
+        the old basis with the corresponding simplex strategy forced.
         """
         B_inv = old_state.basis_inverse
         if B_inv is None:
             return self._scratch(new_problem)
 
         # Check dimension compatibility: B_inv must match new problem's augmented size
-        A_aug, _, _ = RevisedSimplex._add_upper_bound_rows(new_problem)
+        A_aug, b_aug, _ = standard_form.add_upper_bound_rows(new_problem)
         if B_inv.shape[0] != A_aug.shape[0]:
             return self._scratch(new_problem)
 
@@ -227,41 +244,78 @@ class Reoptimizer:
             basis = list(old_state.basis_indices)
         else:
             basis = self._extract_basis_indices(old_state, new_problem)
-        solver = RevisedSimplex.from_warm_start(new_problem, basis, B_inv)
 
-        x_B = B_inv @ solver.b
+        x_B = B_inv @ b_aug
         primal_infeasible = bool(np.any(x_B < -1e-8))
 
-        if primal_infeasible and solver._is_dual_feasible():
+        if primal_infeasible and self._is_dual_feasible(new_problem, basis, B_inv, A_aug):
             # Type R: c unchanged → dual feasible → dual simplex
-            new_state = solver.solve_dual()
+            strategy = SIMPLEX_STRATEGY_DUAL
             method = "warm_start_dual"
         elif primal_infeasible:
             # Both primal and dual infeasible → scratch
             return self._scratch(new_problem)
         else:
             # Primal feasible → primal simplex
-            new_state = solver.solve()
+            strategy = SIMPLEX_STRATEGY_PRIMAL
             method = "warm_start"
+
+        new_state = HiGHSBackend().solve(
+            new_problem, initial_basis=basis, simplex_strategy=strategy,
+        )
+        if not new_state.is_optimal:
+            return self._scratch(new_problem)
 
         return ReoptResult(
             new_state=new_state,
             method_used=method,
-            pivots=len(solver.iterations),
+            pivots=new_state.iteration_count,
             scratch_estimate=old_state.iteration_count,
             basis_preserved=False,
             reopt_time_seconds=new_state.solve_time_seconds,
         )
 
+    def _is_dual_feasible(
+        self,
+        problem: LPProblem,
+        basis: list[int],
+        B_inv: np.ndarray,
+        A_aug: np.ndarray,
+    ) -> bool:
+        """Check dual feasibility of the old basis on the new problem.
+
+        Uses the native objective sense: for maximize, dual feasibility
+        means all nonbasic reduced costs ≤ tol; for minimize, ≥ -tol.
+        """
+        n = problem.num_variables
+        m_aug = A_aug.shape[0]
+        N = n + m_aug
+        A_full = np.hstack([A_aug, np.eye(m_aug)])
+
+        c_full = np.zeros(N)
+        c_full[:n] = problem.c
+
+        basis_set = set(basis)
+        c_B = np.array([c_full[j] for j in basis])
+        y = c_B @ B_inv
+
+        sign = 1.0 if problem.sense == "maximize" else -1.0
+        for j in range(N):
+            if j in basis_set:
+                continue
+            rc_j = c_full[j] - y @ A_full[:, j]
+            if sign * rc_j > OPTIMALITY_TOL:
+                return False
+        return True
+
     def _scratch(self, new_problem: LPProblem) -> ReoptResult:
-        """Full re-solve from scratch."""
-        solver = RevisedSimplex(new_problem)
-        new_state = solver.solve()
+        """Full re-solve from scratch (cold HiGHS solve)."""
+        new_state = HiGHSBackend().solve(new_problem)
 
         return ReoptResult(
             new_state=new_state,
             method_used="scratch",
-            pivots=len(solver.iterations),
+            pivots=new_state.iteration_count,
             scratch_estimate=None,
             basis_preserved=False,
             reopt_time_seconds=new_state.solve_time_seconds,
@@ -319,7 +373,7 @@ class Reoptimizer:
             return self._extract_basis_heuristic(state, problem)
 
         # Build augmented [A|I] matching B_inv dimensions
-        A_aug, b_aug, _ = RevisedSimplex._add_upper_bound_rows(problem)
+        A_aug, b_aug, _ = standard_form.add_upper_bound_rows(problem)
         m_aug = A_aug.shape[0]
 
         # If B_inv dimensions don't match, fall back to heuristic

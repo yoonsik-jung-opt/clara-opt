@@ -24,12 +24,13 @@ CLARA contributes two central capabilities, complemented by two supporting modul
 - **Objective-change attribution** (supporting) — first-order and Shapley
   decomposition that annotates diff reports during reoptimization.
 
-CLARA also offers two solver backends:
-
-- **Internal Revised Simplex** — full transparency, retains $B^{-1}$ at every
-  pivot for downstream analysis (practical for $n \le 100$).
-- **HiGHS** — production-grade reference solver; CLARA reconstructs $B^{-1}$
-  from the reported basis for larger problems.
+CLARA uses **HiGHS** as its single solver backend: after each solve,
+CLARA reconstructs the basis inverse $B^{-1}$ of the augmented system
+from the optimal basis that HiGHS reports, so every downstream module
+(sensitivity region, robustness radius, reoptimization, attribution)
+works on exact solver artifacts at production-solver speed. Warm-starts
+pass the old basis back to HiGHS as an advanced basis with the primal
+or dual simplex strategy selected automatically.
 
 ## Installation
 
@@ -57,8 +58,8 @@ clara explain problem.lp --level brief
 # JSON output
 clara explain problem.lp --format json
 
-# Use HiGHS engine for larger problems
-clara explain problem.lp --engine highs
+# Solve engine is HiGHS
+clara explain problem.lp
 
 # Solve only (no explanation)
 clara solve problem.lp
@@ -71,11 +72,11 @@ clara info problem.lp
 
 ```python
 from clara.io import read_lp
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import solve
 from clara.explain import Explainer
 
 problem = read_lp("problem.lp")
-state = RevisedSimplex(problem).solve()
+state = solve(problem)
 report = Explainer().explain(state, problem=problem)
 print(report.to_text())
 ```

@@ -26,7 +26,7 @@ def _make_state(
     obj_ranges: dict[str, tuple[float, float]] = None,
     rhs_ranges: dict[str, tuple[float, float]] = None,
     b: list[float] = None,
-    engine: EngineType = EngineType.INTERNAL_SIMPLEX,
+    engine: EngineType = EngineType.HIGHS,
 ) -> SolveState:
     """Create a mock SolveState with known values."""
     variables = tuple(
@@ -90,7 +90,7 @@ def knapsack_mip_state():
         var_names=["x1", "x2", "x3", "x4", "x5"],
         con_names=["weight"], duals=[3.0], b=[14],
         basis_basic=[False, True, True, True, False],
-        engine=EngineType.INTERNAL_BNB,
+        engine=EngineType.BASIS_ROUTINE,
     )
 
 

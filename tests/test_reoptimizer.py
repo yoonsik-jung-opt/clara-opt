@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.model.problem import LPProblem
 from clara.reopt.analyzer import ImpactAnalyzer
 from clara.reopt.detector import ChangeDetector
@@ -51,7 +51,7 @@ def albici_columns() -> LPProblem:
 
 @pytest.fixture
 def base_state():
-    return RevisedSimplex(albici_base()).solve()
+    return HiGHSBackend().solve(albici_base())
 
 
 def full_pipeline(old_problem, new_problem, base_state):
@@ -125,7 +125,7 @@ class TestMethodWarmStart:
         """Warm-start optimal should match scratch solve."""
         for new_problem in [albici_b2(), albici_cost()]:
             result, _ = full_pipeline(albici_base(), new_problem, base_state)
-            scratch = RevisedSimplex(new_problem).solve()
+            scratch = HiGHSBackend().solve(new_problem)
             assert abs(result.new_state.optimal_value - scratch.optimal_value) < TOL, (
                 f"Warm-start={result.new_state.optimal_value} vs scratch={scratch.optimal_value}"
             )
@@ -146,7 +146,7 @@ class TestMethodScratch:
     def test_scratch_matches_fresh(self, base_state):
         """Scratch result should match independent solve."""
         result, _ = full_pipeline(albici_base(), albici_columns(), base_state)
-        fresh = RevisedSimplex(albici_columns()).solve()
+        fresh = HiGHSBackend().solve(albici_columns())
         assert abs(result.new_state.optimal_value - fresh.optimal_value) < TOL
 
 
@@ -175,21 +175,27 @@ class TestFullPipeline:
 
 
 # ============================================================
-# 6. from_warm_start correctness
+# 6. Advanced-basis warm start correctness
 # ============================================================
 
-class TestFromWarmStart:
+class TestAdvancedBasisWarmStart:
 
-    def test_classmethod_works(self):
+    def test_warm_start_from_optimal_basis(self):
         p = albici_base()
-        cold = RevisedSimplex(p).solve()
-        # Warm-start from the optimal basis should converge in 0 iterations
-        warm = RevisedSimplex.from_warm_start(
-            p, list(range(3, 7)),  # initial slack basis (will be overridden)
-            np.eye(4),
-        )
-        state = warm.solve()
-        assert abs(state.optimal_value - cold.optimal_value) < TOL
+        cold = HiGHSBackend().solve(p)
+        assert cold.basis_indices is not None
+        # Warm-start from the optimal basis must reproduce the optimum
+        warm = HiGHSBackend().solve(p, initial_basis=cold.basis_indices)
+        assert abs(warm.optimal_value - cold.optimal_value) < TOL
+
+    def test_warm_start_from_slack_basis(self):
+        p = albici_base()
+        cold = HiGHSBackend().solve(p)
+        n = p.num_variables
+        m = p.num_constraints
+        # All-slack basis is valid for b >= 0
+        warm = HiGHSBackend().solve(p, initial_basis=list(range(n, n + m)))
+        assert abs(warm.optimal_value - cold.optimal_value) < TOL
 
 
 # ============================================================
@@ -225,7 +231,7 @@ class TestEdgeCases:
         """SolveState without B⁻¹ → scratch for any method."""
         from clara.model.solve_state import SolveState
         from clara.reopt.types import ReoptDecision
-        state = RevisedSimplex(albici_base()).solve()
+        state = HiGHSBackend().solve(albici_base())
         # Remove B⁻¹
         state_no_binv = SolveState(
             status=state.status, optimal_value=state.optimal_value,

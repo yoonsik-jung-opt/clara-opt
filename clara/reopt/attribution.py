@@ -14,7 +14,7 @@ from typing import Optional
 
 import numpy as np
 
-from clara.engine.simplex import RevisedSimplex
+from clara.engine.highs_backend import HiGHSBackend
 from clara.model.problem import LPProblem
 from clara.model.solve_state import SolveState
 from clara.reopt.types import AttributionResult, ParameterChange
@@ -49,7 +49,7 @@ class ChangeAttributor:
         n = old_problem.num_variables
         m = old_problem.num_constraints
 
-        # Extract old solution values
+        # Extract old solution values (native sense — HiGHS convention)
         x_old = np.array([v.value for v in old_state.variables[:n]])
         y_old = np.array([c.dual_value for c in old_state.constraints[:m]])
 
@@ -57,14 +57,7 @@ class ChangeAttributor:
         delta_b = change.delta_b if change.delta_b is not None else np.zeros(m)
         delta_c = change.delta_c if change.delta_c is not None else np.zeros(n)
 
-        # Adjust for minimize: engine stores negated values internally
-        if old_problem.sense == "minimize":
-            y_old = -y_old
-            delta_c_internal = -delta_c
-        else:
-            delta_c_internal = delta_c
-
-        # First-order effects
+        # First-order effects (all quantities in the problem's native sense)
         rhs_effect = float(y_old @ delta_b[:m])
         obj_effect = float(delta_c[:n] @ x_old)
 
@@ -77,15 +70,19 @@ class ChangeAttributor:
             delta_b_aug = np.zeros(m_aug)
             delta_b_aug[:len(delta_b)] = delta_b
 
-            basis_decision = [j for j, v in enumerate(old_state.variables[:n])
-                              if v.basis_status.name == "BASIC"]
+            # Align Δc_B with the basis row order
             dc_B = np.zeros(m_aug)
-            for k, j in enumerate(basis_decision):
-                if k < m_aug and j < n:
-                    dc_B[k] = delta_c_internal[j]
+            if old_state.basis_indices is not None:
+                for i, j in enumerate(old_state.basis_indices):
+                    if i < m_aug and j < n:
+                        dc_B[i] = delta_c[j]
+            else:
+                basis_decision = [j for j, v in enumerate(old_state.variables[:n])
+                                  if v.basis_status.name == "BASIC"]
+                for k, j in enumerate(basis_decision):
+                    if k < m_aug and j < n:
+                        dc_B[k] = delta_c[j]
             interaction = float(dc_B @ (B_inv @ delta_b_aug))
-            if old_problem.sense == "minimize":
-                interaction = -interaction
 
         residual = delta_z - (rhs_effect + obj_effect + interaction)
         basis_preserved = abs(residual) < 1e-4
@@ -148,7 +145,7 @@ class ChangeAttributor:
             sense=old_problem.sense,
         )
         try:
-            state = RevisedSimplex(variant).solve()
+            state = HiGHSBackend().solve(variant)
             return state.optimal_value if state.is_optimal else None
         except Exception:
             return None

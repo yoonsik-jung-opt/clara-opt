@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.model.problem import LPProblem
 from clara.reopt.sensitivity_region import SimultaneousRegionAnalyzer
 
@@ -18,7 +18,7 @@ def albici_base():
 
 @pytest.fixture
 def base_state():
-    return RevisedSimplex(albici_base()).solve()
+    return HiGHSBackend().solve(albici_base())
 
 
 @pytest.fixture
@@ -58,8 +58,10 @@ class TestRatio:
 class TestOAT:
 
     def test_oat_rhs_positive(self, region):
+        # HiGHS ranging reports zero-width ranges on degenerate rows,
+        # so tolerances are nonnegative (the analyzer filters zeros).
         for name, tol in region.oat_rhs_tolerances.items():
-            assert tol > 0 or tol == float("inf")
+            assert tol >= 0 or tol == float("inf")
 
     def test_oat_obj_positive(self, region):
         for name, tol in region.oat_obj_tolerances.items():

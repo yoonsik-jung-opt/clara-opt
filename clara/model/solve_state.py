@@ -1,8 +1,8 @@
 """SolveState — Immutable snapshot of solver state after solving.
 
-This is the central data structure of CLARA. Both InternalSimplex and HiGHS
-backends fill the same structure, enabling backend-agnostic explanation and
-reoptimization.
+This is the central data structure of CLARA. The HiGHS backend fills it,
+including the basis inverse B^-1 reconstructed from the optimal basis,
+enabling backend-agnostic explanation and reoptimization.
 
 Architecture:
     SolveEngine.solve(problem) → SolveState
@@ -58,10 +58,15 @@ class BasisStatus(Enum):
 
 
 class EngineType(Enum):
-    """Which solve engine produced this state."""
-    INTERNAL_SIMPLEX = auto()
-    INTERNAL_BNB = auto()       # Phase 1.5
+    """Which solve engine produced this state.
+
+    HIGHS: the HiGHS backend (CLARA's single solver backend).
+    BASIS_ROUTINE: a CLARA basis routine that produced the state
+        without a solver run — basis-preserving recompute or the
+        parametric tracer operating on the retained factorization.
+    """
     HIGHS = auto()
+    BASIS_ROUTINE = auto()
 
 
 # ============================================================
@@ -172,20 +177,17 @@ class SolveState:
         3. Impact Analyzer (Ph 2) — reads sensitivity_ranges + basis_inverse
         4. Reoptimizer (Phase 2)  — uses basis_inverse for warm-start
 
-    Field availability by backend:
-        ┌────────────────────────┬──────────────┬──────────────┐
-        │ Field                  │ Internal     │ HiGHS        │
-        ├────────────────────────┼──────────────┼──────────────┤
-        │ status                 │ ✓            │ ✓            │
-        │ optimal_value          │ ✓            │ ✓            │
-        │ variables              │ ✓            │ ✓            │
-        │ constraints            │ ✓            │ ✓            │
-        │ sensitivity            │ ✓ (from B⁻¹) │ ✓ (ranging)  │
-        │ basis_inverse          │ ✓            │ ✗            │
-        │ iteration_history      │ ✓            │ ✗            │
-        │ bnb_history            │ ✓ (Ph 1.5)  │ ✗            │
-        │ solve_stats            │ ✓            │ ✓            │
-        └────────────────────────┴──────────────┴──────────────┘
+    Field availability (HiGHS backend):
+        status, optimal_value, variables, constraints ........ always
+        sensitivity .......................................... HiGHS ranging
+        basis_inverse, basis_indices ......................... reconstructed
+            from the reported optimal basis in the augmented
+            [A_aug | I] convention (None if reconstruction is not
+            applicable, e.g. nonzero lower bounds)
+        condition_number, degenerate_count,
+        basis_robustness_d0 .................................. from B^-1
+        iteration_history, bnb_history ....................... always None
+            (retained for backward compatibility of serialized states)
     """
 
     # --- Core results (both backends) ---
@@ -200,9 +202,9 @@ class SolveState:
     solve_time_seconds: float
     iteration_count: int
 
-    # --- Internal engine only (None if HiGHS backend) ---
+    # --- Reconstructed basis data (None if reconstruction not applicable) ---
     basis_inverse: Optional[np.ndarray] = None
-    basis_indices: Optional[tuple[int, ...]] = None  # column indices of basis in [A|I]
+    basis_indices: Optional[tuple[int, ...]] = None  # column indices of basis in [A_aug|I]
     iteration_history: Optional[tuple[IterationSnapshot, ...]] = None
     bnb_history: Optional[tuple[BnBNodeSnapshot, ...]] = None
 

@@ -14,7 +14,7 @@ from typing import Optional
 
 import numpy as np
 
-from clara.engine.simplex import RevisedSimplex
+from clara.engine.highs_backend import HiGHSBackend
 from clara.model.problem import LPProblem
 from clara.model.solve_state import SolveState
 from clara.reopt.types import MIPBoundResult, ParameterChange
@@ -116,7 +116,7 @@ class MIPBoundAnalyzer:
             lp_solve_needed = True
             lp_problem = new_problem.as_lp()
             try:
-                lp_new_state = RevisedSimplex(lp_problem).solve()
+                lp_new_state = HiGHSBackend().solve(lp_problem)
                 if lp_new_state.is_optimal:
                     z_lp_new = lp_new_state.optimal_value
             except Exception:
