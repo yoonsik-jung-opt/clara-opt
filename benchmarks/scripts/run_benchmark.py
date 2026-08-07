@@ -59,14 +59,14 @@ def solve_internal_mps(mps_path):
     """Solve MPS file using CLARA's MPS parser + Internal Simplex."""
     try:
         from clara.io.mps_parser import read_mps
-        from clara.engine.simplex import RevisedSimplex
+        from clara.engine import HiGHSBackend
 
         problem = read_mps(mps_path)
         if problem.num_variables == 0:
             return None, 0, 0, "parser: 0 vars"
 
         start = time.perf_counter()
-        state = RevisedSimplex(problem).solve()
+        state = HiGHSBackend().solve(problem)
         elapsed = time.perf_counter() - start
 
         if not state.is_optimal:

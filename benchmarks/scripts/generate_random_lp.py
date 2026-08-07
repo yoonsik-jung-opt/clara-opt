@@ -109,11 +109,11 @@ def solve_internal(c, A, b, upper_bounds=None):
     """Solve with Internal Simplex, return (optimal_value, time, iters, status)."""
     try:
         from clara.model.problem import LPProblem
-        from clara.engine.simplex import RevisedSimplex
+        from clara.engine import HiGHSBackend
         ub = np.array(upper_bounds) if upper_bounds is not None else None
         p = LPProblem(c=c, A=A, b=b, upper_bounds=ub)
         start = time.perf_counter()
-        state = RevisedSimplex(p).solve()
+        state = HiGHSBackend().solve(p)
         elapsed = time.perf_counter() - start
         status = state.status.name
         if elapsed > 60:
@@ -147,10 +147,9 @@ def main():
                 # HiGHS always runs
                 h_opt, h_time, h_status = solve_highs(c, A, b, ub)
 
-                # Internal solve (skip large instances)
-                i_opt, i_time, i_iters, i_status = None, 0, 0, "skipped"
-                if n <= 100:
-                    i_opt, i_time, i_iters, i_status = solve_internal(c, A, b, ub)
+                # CLARA-backend solve (validates the wrapper against raw
+                # highspy; no size guard needed with the HiGHS backend)
+                i_opt, i_time, i_iters, i_status = solve_internal(c, A, b, ub)
 
                 match = ""
                 if h_opt is not None and i_opt is not None:

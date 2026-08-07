@@ -27,7 +27,7 @@ def process_single(task):
     filepath = task["filepath"]
 
     try:
-        from clara.engine.simplex import RevisedSimplex
+        from clara.engine import HiGHSBackend
         from clara.explain.explainer import Explainer
         from clara.explain.types import DetailLevel
 
@@ -39,7 +39,7 @@ def process_single(task):
             from clara.io.lp_parser import read_lp
             problem = read_lp(p)
 
-        state = RevisedSimplex(problem).solve()
+        state = HiGHSBackend().solve(problem)
         if not state.is_optimal:
             return None
 
@@ -93,8 +93,7 @@ def main():
     files = []
 
     for f in sorted(NETLIB_DIR.glob("*.mps")):
-        if f.stem != "blend":
-            files.append(f)
+        files.append(f)
 
     manifest = RANDOM_DIR / "manifest.csv"
     if manifest.exists():

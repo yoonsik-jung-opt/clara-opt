@@ -34,7 +34,7 @@ def process_single(task):
 
     try:
         import numpy as np
-        from clara.engine.simplex import RevisedSimplex
+        from clara.engine import HiGHSBackend
         from clara.reopt.detector import ChangeDetector
         from clara.reopt.reoptimizer import Reoptimizer
         from clara.reopt.types import ReoptDecision
@@ -50,7 +50,7 @@ def process_single(task):
         old_problem = load_problem(base_file)
         new_problem = load_problem(pert_file)
 
-        old_state = RevisedSimplex(old_problem).solve()
+        old_state = HiGHSBackend().solve(old_problem)
         if not old_state.is_optimal:
             return None
 
@@ -79,7 +79,7 @@ def process_single(task):
 
         # Scratch solve
         t0 = time.perf_counter()
-        scratch = RevisedSimplex(new_problem).solve()
+        scratch = HiGHSBackend().solve(new_problem)
         t_scratch = time.perf_counter() - t0
         if not scratch.is_optimal:
             return None

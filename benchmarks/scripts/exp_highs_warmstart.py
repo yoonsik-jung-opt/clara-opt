@@ -17,7 +17,7 @@ import highspy
 import numpy as np
 
 from clara.engine.highs_backend import HiGHSBackend
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.io.lp_parser import read_lp
 from clara.model.problem import LPProblem
 from clara.model.solve_state import BasisStatus
@@ -121,7 +121,7 @@ def run_comparison(base_problem, pert_problem, base_state):
 
     # 4. CLARA cold start
     t0 = time.perf_counter()
-    clara_cold = RevisedSimplex(pert_problem).solve()
+    clara_cold = HiGHSBackend().solve(pert_problem)
     clara_cold_t = time.perf_counter() - t0
     clara_cold_z = clara_cold.optimal_value
     clara_cold_piv = clara_cold.iteration_count
@@ -156,7 +156,7 @@ def main():
             continue
 
         base_problem = read_lp(base_lp)
-        base_state = RevisedSimplex(base_problem).solve()
+        base_state = HiGHSBackend().solve(base_problem)
         if not base_state.is_optimal:
             continue
 

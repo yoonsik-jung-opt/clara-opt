@@ -185,10 +185,20 @@ class _MPSParser:
             i += 2
 
     def _parse_rhs(self, fields: list[str], lineno: int) -> None:
-        if len(fields) < 3:
+        if len(fields) < 2:
             return
-        # First field is RHS vector name (ignored)
+        # The first field is the RHS vector name — but fixed-format MPS
+        # allows it to be omitted (e.g., Netlib blend), in which case the
+        # line starts directly with (row, value) pairs. Detect this by
+        # checking whether fields[0] is a known row name followed by a
+        # numeric value.
         i = 1
+        if fields[0] in self.row_types and len(fields) >= 2:
+            try:
+                float(fields[1])
+                i = 0  # no vector name: fields are (row, value) pairs
+            except ValueError:
+                pass
         while i + 1 < len(fields):
             row_name = fields[i]
             try:

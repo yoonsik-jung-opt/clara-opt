@@ -31,7 +31,7 @@ def process_single(task):
     pi = task["pert_info"]
 
     try:
-        from clara.engine.simplex import RevisedSimplex
+        from clara.engine import HiGHSBackend
         from clara.reopt.detector import ChangeDetector
         from clara.reopt.parametric import ParametricLPSolver
 
@@ -44,7 +44,7 @@ def process_single(task):
             return read_lp(p)
 
         old_problem = load_problem(base_file)
-        old_state = RevisedSimplex(old_problem).solve()
+        old_state = HiGHSBackend().solve(old_problem)
         if not old_state.is_optimal or old_state.basis_inverse is None:
             return None
 
@@ -60,7 +60,7 @@ def process_single(task):
         # Scratch verify (with HiGHS fallback)
         z_scratch = None
         try:
-            scratch = RevisedSimplex(new_problem).solve()
+            scratch = HiGHSBackend().solve(new_problem)
             if scratch.is_optimal:
                 z_scratch = scratch.optimal_value
         except Exception:

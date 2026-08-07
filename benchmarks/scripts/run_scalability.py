@@ -37,7 +37,7 @@ def process_single(task):
 
     try:
         from clara.model.problem import LPProblem
-        from clara.engine.simplex import RevisedSimplex
+        from clara.engine import HiGHSBackend
         from clara.engine.highs_backend import HiGHSBackend
         from clara.explain.explainer import Explainer
         from clara.explain.types import DetailLevel
@@ -62,7 +62,7 @@ def process_single(task):
         # Internal Simplex
         t0 = time.perf_counter()
         try:
-            state_i = RevisedSimplex(problem).solve()
+            state_i = HiGHSBackend().solve(problem)
             ti = time.perf_counter() - t0
             if ti > TIMEOUT_INTERNAL:
                 i_status = "TIMEOUT"

@@ -30,7 +30,7 @@ def process_single(task):
     filepath = task["filepath"]
 
     try:
-        from clara.engine.simplex import RevisedSimplex
+        from clara.engine import HiGHSBackend
         from clara.reopt.sensitivity_region import SimultaneousRegionAnalyzer
 
         p = Path(filepath)
@@ -43,7 +43,7 @@ def process_single(task):
 
         name = p.stem
 
-        state = RevisedSimplex(problem).solve()
+        state = HiGHSBackend().solve(problem)
         if not state.is_optimal or state.basis_inverse is None:
             return None
 
@@ -75,7 +75,7 @@ def process_single(task):
 
 def _albici_projections():
     """Generate 2D projections for Albici base problem."""
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.model.problem import LPProblem
     from clara.reopt.sensitivity_region import SimultaneousRegionAnalyzer
 
@@ -84,7 +84,7 @@ def _albici_projections():
         b=[1200, 1400, 2000, 800],
         var_names=["x1", "x2", "x3"], constraint_names=["S1", "S2", "S3", "S4"],
     )
-    state = RevisedSimplex(problem).solve()
+    state = HiGHSBackend().solve(problem)
     if not state.is_optimal:
         return
 

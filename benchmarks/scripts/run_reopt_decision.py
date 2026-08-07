@@ -34,7 +34,7 @@ def process_single(task):
     pert_info = task["pert_info"]
 
     try:
-        from clara.engine.simplex import RevisedSimplex
+        from clara.engine import HiGHSBackend
         from clara.reopt.detector import ChangeDetector
         from clara.reopt.analyzer import ImpactAnalyzer
 
@@ -49,7 +49,7 @@ def process_single(task):
         old_problem = load_problem(base_file)
         new_problem = load_problem(pert_file)
 
-        old_state = RevisedSimplex(old_problem).solve()
+        old_state = HiGHSBackend().solve(old_problem)
         if not old_state.is_optimal:
             return None
 
@@ -60,7 +60,7 @@ def process_single(task):
         decision = ImpactAnalyzer().analyze(old_state, change, old_problem)
 
         # Ground truth: scratch solve new problem
-        new_state = RevisedSimplex(new_problem).solve()
+        new_state = HiGHSBackend().solve(new_problem)
         if not new_state.is_optimal:
             return None
 

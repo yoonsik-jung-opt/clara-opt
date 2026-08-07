@@ -185,7 +185,8 @@ def gen_exp7():
         obj = np.mean([float(r["obj_pct"]) for r in rr])
         inter = np.mean([float(r["interaction_pct"]) for r in rr])
         bp = sum(1 for r in rr if r["basis_preserved"] == "True")
-        lines.append(f"  {p.replace('_', r'\\_')} & {len(rr)} & {rhs:.1f} & {obj:.1f} "
+        p_esc = p.replace("_", r"\_")
+        lines.append(f"  {p_esc} & {len(rr)} & {rhs:.1f} & {obj:.1f} "
                      f"& {inter:.1f} & {bp}/{len(rr)} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
     _write_tex("exp7_attribution.tex", lines)
