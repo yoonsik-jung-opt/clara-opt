@@ -252,6 +252,7 @@ def gen_region_histogram_fig():
 
 
 def main():
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     print("Generating figures:")
     gen_scalability_fig()
     gen_warmstart_fig()
