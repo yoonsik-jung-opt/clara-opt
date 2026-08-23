@@ -12,13 +12,12 @@ from typing import Optional
 import click
 
 from clara.io.lp_parser import LPParseError, read_lp
-from clara.engine.simplex import RevisedSimplex
 from clara.explain.explainer import Explainer
 from clara.explain.types import DetailLevel
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="clara")
+@click.version_option(version="0.3.0", prog_name="clara")
 def main():
     """CLARA — Classical LP Analysis for Reoptimization and Attribution.
 
@@ -30,8 +29,8 @@ def main():
 
 @main.command()
 @click.argument("file", type=click.Path(exists=True, dir_okay=False))
-@click.option("--engine", type=click.Choice(["internal", "highs"]),
-              default="internal", help="Solve engine.")
+@click.option("--engine", type=click.Choice(["highs"]),
+              default="highs", help="Solve engine (HiGHS).")
 @click.option("--level", type=click.Choice(["brief", "detailed"]),
               default="detailed", help="Explanation detail level.")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]),
@@ -64,8 +63,8 @@ def explain(file, engine, level, fmt, output, quiet):
 
 @main.command()
 @click.argument("file", type=click.Path(exists=True, dir_okay=False))
-@click.option("--engine", type=click.Choice(["internal", "highs"]),
-              default="internal")
+@click.option("--engine", type=click.Choice(["highs"]),
+              default="highs")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]),
               default="text")
 @click.option("--output", "-o", type=click.Path(), default=None)
@@ -100,8 +99,8 @@ def info(file):
 @main.command()
 @click.argument("old_file", type=click.Path(exists=True, dir_okay=False))
 @click.argument("new_file", type=click.Path(exists=True, dir_okay=False))
-@click.option("--engine", type=click.Choice(["internal", "highs"]),
-              default="internal")
+@click.option("--engine", type=click.Choice(["highs"]),
+              default="highs")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]),
               default="text")
 @click.option("--output", "-o", type=click.Path(), default=None)
@@ -178,23 +177,18 @@ def _parse_file(filepath: str):
 
 
 def _solve(problem, engine_name: str):
-    """Solve with the selected engine. Auto-detects LP vs MIP for internal engine."""
-    if engine_name == "highs":
-        try:
-            from clara.engine.highs_backend import HiGHSBackend
-            return HiGHSBackend().solve(problem)
-        except (ImportError, ModuleNotFoundError):
-            click.secho(
-                "HiGHS backend not yet available. Using internal engine.",
-                fg="yellow", err=True,
-            )
-
-    # Auto-detect LP vs MIP
+    """Solve with the HiGHS backend (CLARA's single solver backend)."""
     if problem.has_integers:
-        from clara.engine.bnb import InternalBnB
-        return InternalBnB().solve(problem)
+        click.secho(
+            "Integer problems are not supported: the internal B&B engine "
+            "was removed in v0.3.0. Solve the LP relaxation instead "
+            "(problem.as_lp()).",
+            fg="red", err=True,
+        )
+        sys.exit(1)
 
-    return RevisedSimplex(problem).solve()
+    from clara.engine.highs_backend import HiGHSBackend
+    return HiGHSBackend().solve(problem)
 
 
 def _format_solve_text(state) -> str:

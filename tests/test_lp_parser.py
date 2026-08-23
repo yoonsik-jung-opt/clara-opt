@@ -9,7 +9,7 @@ import pytest
 from pathlib import Path
 
 from clara.io.lp_parser import LPParseError, parse_lp, read_lp
-from clara.engine.simplex import solve
+from clara.engine import solve
 
 FIXTURES = Path(__file__).parent / "fixtures"
 TOL = 1e-6

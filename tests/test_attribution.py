@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.model.problem import LPProblem
 from clara.reopt.attribution import ChangeAttributor
 from clara.reopt.detector import ChangeDetector
@@ -34,12 +34,12 @@ def albici_b1():
 
 @pytest.fixture
 def base_state():
-    return RevisedSimplex(albici_base()).solve()
+    return HiGHSBackend().solve(albici_base())
 
 
 @pytest.fixture
 def compound_state():
-    return RevisedSimplex(albici_compound()).solve()
+    return HiGHSBackend().solve(albici_compound())
 
 
 class TestFirstOrder:
@@ -107,7 +107,7 @@ class TestBasisPreserved:
         """Small single-RHS change → exact first-order."""
         new = LPProblem(c=albici_base().c, A=albici_base().A, b=[1300, 1400, 2000, 800],
                         var_names=["x1", "x2", "x3"], constraint_names=["S1", "S2", "S3", "S4"])
-        new_state = RevisedSimplex(new).solve()
+        new_state = HiGHSBackend().solve(new)
         change = ChangeDetector().detect(albici_base(), new)
         attr = ChangeAttributor().attribute(
             base_state, new_state, albici_base(), new, change,

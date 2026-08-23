@@ -31,7 +31,7 @@ def process_single(task):
     pi = task["pert_info"]
 
     try:
-        from clara.engine.simplex import RevisedSimplex
+        from clara.engine import HiGHSBackend
         from clara.reopt.attribution import ChangeAttributor
         from clara.reopt.detector import ChangeDetector
 
@@ -44,12 +44,12 @@ def process_single(task):
             return read_lp(p)
 
         old_problem = load_problem(base_file)
-        old_state = RevisedSimplex(old_problem).solve()
+        old_state = HiGHSBackend().solve(old_problem)
         if not old_state.is_optimal:
             return {"base_instance": base_name, "error": f"old: {old_state.status.name}"}
 
         new_problem = load_problem(pert_file)
-        new_state = RevisedSimplex(new_problem).solve()
+        new_state = HiGHSBackend().solve(new_problem)
         if not new_state.is_optimal:
             # HiGHS fallback
             from clara.engine.highs_backend import HiGHSBackend

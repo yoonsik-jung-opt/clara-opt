@@ -98,8 +98,8 @@ class SimultaneousRegionAnalyzer:
             return {"chebyshev_radius_joint": 0.0, "chebyshev_radius_b_only": 0.0, "ratio": 0.0}
 
         B_inv = state.basis_inverse
-        from clara.engine.simplex import RevisedSimplex
-        A_aug, b_aug, _ = RevisedSimplex._add_upper_bound_rows(problem)
+        import clara.engine.standard_form as standard_form
+        A_aug, b_aug, _ = standard_form.add_upper_bound_rows(problem)
         m_aug = A_aug.shape[0]
         x_B = B_inv @ b_aug
 
@@ -244,8 +244,8 @@ class SimultaneousRegionAnalyzer:
         m = problem.num_constraints
 
         # Pad b to augmented dimensions (UB rows have their own RHS)
-        from clara.engine.simplex import RevisedSimplex
-        _, b_aug, _ = RevisedSimplex._add_upper_bound_rows(problem)
+        import clara.engine.standard_form as standard_form
+        _, b_aug, _ = standard_form.add_upper_bound_rows(problem)
         x_B = B_inv @ b_aug
 
         # Parameter vector: δ = [Δb₁..Δbₘ] (original constraints only)

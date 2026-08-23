@@ -197,8 +197,8 @@ def main():
         total += process_base(args.filepath)
 
     if args.all_netlib:
-        # Skip blend (Internal Simplex can't solve it)
-        skip = {"blend"}
+        # All 8 Netlib instances are solvable with the HiGHS backend
+        skip = set()
         for f in sorted(NETLIB_DIR.glob("*.mps")):
             if f.stem in skip:
                 continue
@@ -220,7 +220,7 @@ def main():
     if not args.filepath and not args.all_netlib and not args.all_random:
         # Default: Netlib only
         print("Generating perturbations for Netlib instances...")
-        skip = {"blend"}
+        skip = set()
         for f in sorted(NETLIB_DIR.glob("*.mps")):
             if f.stem in skip:
                 continue

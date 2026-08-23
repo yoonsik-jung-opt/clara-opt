@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.model.problem import LPProblem
 from clara.reopt.analyzer import ImpactAnalyzer
 from clara.reopt.detector import ChangeDetector
@@ -83,7 +83,7 @@ def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     old_problem = albici_base()
-    base_state = RevisedSimplex(old_problem).solve()
+    base_state = HiGHSBackend().solve(old_problem)
 
     results = []
     print(f"{'Scenario':<16} {'Type':<8} {'Method':<16} {'Pivots':>6} "
@@ -101,7 +101,7 @@ def main():
         )
 
         # Scratch solve for comparison
-        scratch_state = RevisedSimplex(new_problem).solve()
+        scratch_state = HiGHSBackend().solve(new_problem)
         scratch_pivots = scratch_state.iteration_count
 
         # Check optimal value

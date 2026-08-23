@@ -75,9 +75,10 @@ class TestExplainCommand:
             os.unlink(path)
 
     def test_explain_all_fixtures(self, runner):
-        # Only test fixtures with pure <= constraints (simplex lacks Phase I
-        # for negative RHS from >= negation)
-        skip = {"parser_minimal.lp", "parser_comprehensive.lp"}
+        # knapsack_small / facility_small are MIPs: rejected since
+        # the internal B&B removal
+        skip = {"parser_minimal.lp", "parser_comprehensive.lp",
+                "knapsack_small.lp", "facility_small.lp"}
         for lp_file in FIXTURES.glob("*.lp"):
             if lp_file.name in skip:
                 continue
@@ -144,18 +145,18 @@ class TestInfoCommand:
 
 class TestEngineOption:
 
-    def test_engine_internal(self, runner):
+    def test_engine_internal_removed(self, runner):
+        """The internal engine choice was removed in v0.3.0."""
         result = runner.invoke(main, ["explain", ALBICI, "--engine", "internal"])
-        assert result.exit_code == 0
+        assert result.exit_code != 0
 
-    def test_engine_highs_fallback(self, runner):
+    def test_engine_highs(self, runner):
         result = runner.invoke(main, ["explain", ALBICI, "--engine", "highs"])
-        # Should fallback to internal with warning
         assert result.exit_code == 0
 
 
 # ============================================================
-# 4b. MIP via CLI
+# 4b. MIP via CLI — rejected since the internal B&B was removed
 # ============================================================
 
 KNAPSACK = str(FIXTURES / "knapsack_small.lp")
@@ -163,25 +164,15 @@ KNAPSACK = str(FIXTURES / "knapsack_small.lp")
 
 class TestMIPCLI:
 
-    def test_explain_mip_file(self, runner):
+    def test_explain_mip_rejected(self, runner):
         result = runner.invoke(main, ["explain", KNAPSACK])
-        assert result.exit_code == 0
-        assert "42.0000" in result.output
+        assert result.exit_code == 1
+        assert "not supported" in result.output
 
-    def test_explain_mip_has_bnb_section(self, runner):
-        result = runner.invoke(main, ["explain", KNAPSACK])
-        assert "BRANCH-AND-BOUND" in result.output
-
-    def test_explain_mip_json(self, runner):
-        result = runner.invoke(main, ["explain", KNAPSACK, "--format", "json"])
-        assert result.exit_code == 0
-        parsed = json.loads(result.output)
-        assert "bnb_report" in parsed
-
-    def test_solve_mip(self, runner):
+    def test_solve_mip_rejected(self, runner):
         result = runner.invoke(main, ["solve", KNAPSACK])
-        assert result.exit_code == 0
-        assert "42.0000" in result.output
+        assert result.exit_code == 1
+        assert "not supported" in result.output
 
 
 # ============================================================

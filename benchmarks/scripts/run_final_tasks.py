@@ -36,7 +36,7 @@ def get_bases(max_n=20):
 # ============================================================
 
 def run_task1():
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.model.problem import LPProblem
     from clara.reopt.sensitivity_region import SimultaneousRegionAnalyzer
 
@@ -47,7 +47,7 @@ def run_task1():
     albici = LPProblem(c=[3, 4, 5], A=[[1, 2, 1], [1, 0, 3], [2, 1, 2], [0, 2, 3]],
                        b=[1200, 1400, 2000, 800],
                        var_names=["x1", "x2", "x3"], constraint_names=["S1", "S2", "S3", "S4"])
-    s = RevisedSimplex(albici).solve()
+    s = HiGHSBackend().solve(albici)
     r = analyzer.analyze_joint(s, albici)
     print(f"  Albici: r*_b={r['chebyshev_radius_b_only']:.4f}, r*+={r['chebyshev_radius_joint']:.4f}, "
           f"ratio={r['ratio']:.4f}")
@@ -55,7 +55,7 @@ def run_task1():
     # Case study
     from benchmarks.scripts.supply_chain_case_study import create_base_problem
     sc, _, _ = create_base_problem()
-    s_sc = RevisedSimplex(sc).solve()
+    s_sc = HiGHSBackend().solve(sc)
     if s_sc.is_optimal:
         r_sc = analyzer.analyze_joint(s_sc, sc)
         print(f"  Case study: r*_b={r_sc['chebyshev_radius_b_only']:.4f}, r*+={r_sc['chebyshev_radius_joint']:.4f}, "
@@ -70,7 +70,7 @@ def run_task1():
             continue
         try:
             p = load_lp(lp)
-            st = RevisedSimplex(p).solve()
+            st = HiGHSBackend().solve(p)
             if st.is_optimal and st.basis_indices:
                 rr = analyzer.analyze_joint(st, p)
                 if rr["chebyshev_radius_b_only"] > 1e-10:
@@ -112,7 +112,7 @@ def wendell_tolerance_rhs(B_inv, x_B, b_orig):
 
 
 def run_task2():
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.reopt.sensitivity_region import SimultaneousRegionAnalyzer
 
     print("=== Task 2: Wendell Tolerance Comparison ===")
@@ -126,12 +126,12 @@ def run_task2():
             continue
         try:
             p = load_lp(lp)
-            st = RevisedSimplex(p).solve()
+            st = HiGHSBackend().solve(p)
             if not st.is_optimal or st.basis_inverse is None:
                 continue
 
-            from clara.engine.simplex import RevisedSimplex as RS
-            _, b_aug, _ = RS._add_upper_bound_rows(p)
+            import clara.engine.standard_form as standard_form
+            _, b_aug, _ = standard_form.add_upper_bound_rows(p)
             x_B = st.basis_inverse @ b_aug
             t, _ = wendell_tolerance_rhs(st.basis_inverse, x_B, p.b)  # original b
 
@@ -163,7 +163,7 @@ def run_task2():
 # ============================================================
 
 def run_task3():
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.explain.explainer import Explainer
     from clara.explain.types import DetailLevel
     from clara.reopt.attribution import ChangeAttributor
@@ -182,7 +182,7 @@ def run_task3():
     reps = 3
     for _ in range(reps):
         t0 = time.perf_counter()
-        state = RevisedSimplex(base).solve()
+        state = HiGHSBackend().solve(base)
         timings.setdefault("solve", []).append(time.perf_counter() - t0)
 
         t0 = time.perf_counter()
@@ -194,7 +194,7 @@ def run_task3():
         timings.setdefault("region", []).append(time.perf_counter() - t0)
 
         change = ChangeDetector().detect(base, pert)
-        pert_state = RevisedSimplex(pert).solve()
+        pert_state = HiGHSBackend().solve(pert)
 
         t0 = time.perf_counter()
         ChangeAttributor().attribute(state, pert_state, base, pert, change, compute_shapley=False)

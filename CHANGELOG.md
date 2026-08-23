@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-23
+
+### Changed
+- **HiGHS is now the single solver backend.** After each solve, CLARA
+  reconstructs the basis inverse B^-1 of the augmented system
+  [A_aug | I] from the optimal basis reported by HiGHS, so all
+  downstream modules (sensitivity region, basis robustness radius,
+  reoptimizer, parametric tracer, attribution) operate on exact solver
+  artifacts at production-solver speed.
+- Warm-start reoptimization now passes the old basis to HiGHS as an
+  advanced starting basis, forcing the dual (Type R) or primal
+  (Type C) simplex strategy chosen by the impact analyzer.
+- The parametric tracer remains a CLARA-native routine operating on
+  the retained basis factorization; it now supports minimize-sense
+  problems and reports native-sense objectives/duals.
+- Attribution and all SolveStates now use the problem's native sense
+  throughout (no internal sign flips).
+- `EngineType` is now `HIGHS` or `BASIS_ROUTINE` (recompute /
+  parametric outputs).
+
+### Removed
+- Internal educational Revised Simplex engine (`clara.engine.simplex`)
+  and the internal branch-and-bound engine (`clara.engine.bnb`).
+  `from clara.engine import solve` replaces
+  `from clara.engine.simplex import solve`.
+- CLI `--engine internal` option; MIP files are now rejected with an
+  explanatory error.
+
+### Added
+- `clara.engine.standard_form` with the shared augmented-system
+  helpers previously private to the internal engine.
+- `HiGHSBackend.solve(problem, initial_basis=..., simplex_strategy=...)`
+  advanced-basis warm-start API.
+- B^-1 reconstruction validation test suite
+  (`tests/test_cross_validation.py`), replacing the internal-vs-HiGHS
+  cross-validation.
+- Medium-scale Netlib warm-start benchmark (solver-level timing via
+  `changeRowBounds`/`changeColCost` + `setBasis`) and refreshed
+  benchmark suite ported to the HiGHS backend.
+
+### Fixed
+- MPS parser: RHS sections whose lines omit the RHS vector name
+  (e.g. Netlib `blend`) were parsed as all-zero right-hand sides;
+  the parser now detects the unnamed-vector form and reads the
+  values correctly.
+- Package metadata: corrected author name and repository URLs.
+
 ## [0.2.2] - 2026-04-27
 
 ### Removed

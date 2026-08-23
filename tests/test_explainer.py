@@ -11,7 +11,7 @@ import math
 import numpy as np
 import pytest
 
-from clara.engine.simplex import solve
+from clara.engine import solve
 from clara.explain.explainer import Explainer
 from clara.explain.types import DetailLevel
 from clara.model.problem import LPProblem
@@ -222,7 +222,7 @@ class TestHeader:
         assert "3688.8889" in albici_report.header
 
     def test_header_contains_engine(self, albici_report):
-        assert "INTERNAL_SIMPLEX" in albici_report.header
+        assert "HIGHS" in albici_report.header
 
     def test_header_contains_iterations(self, albici_report):
         assert "iterations" in albici_report.header

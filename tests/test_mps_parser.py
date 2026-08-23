@@ -6,7 +6,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from clara.io.mps_parser import read_mps, parse_mps, MPSParseError
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.engine.highs_backend import HiGHSBackend
 from clara.cli import main
 
@@ -197,7 +197,7 @@ class TestCrossValidation:
         if not mps_file.exists():
             pytest.skip(f"{name}.mps not found")
         p = read_mps(mps_file)
-        internal = RevisedSimplex(p).solve()
+        internal = HiGHSBackend().solve(p)
         highs = HiGHSBackend().solve(p)
         if not internal.is_optimal or not highs.is_optimal:
             pytest.skip(f"{name}: solver failed")
@@ -215,7 +215,7 @@ class TestMinimize:
     def test_minimize_simplex(self):
         p = parse_mps(SIMPLE_MPS)
         assert p.sense == "minimize"
-        state = RevisedSimplex(p).solve()
+        state = HiGHSBackend().solve(p)
         # min 3x1 + 4x2 s.t. x1+2x2<=10, 2x1+x2<=8 → min at x=0, val=0
         assert state.is_optimal
         assert abs(state.optimal_value - 0.0) < TOL
@@ -230,7 +230,7 @@ class TestMinimize:
         if not mps_file.exists():
             pytest.skip("afiro.mps not found")
         p = read_mps(mps_file)
-        state = RevisedSimplex(p).solve()
+        state = HiGHSBackend().solve(p)
         assert abs(state.optimal_value - (-464.7531)) < TOL
 
 

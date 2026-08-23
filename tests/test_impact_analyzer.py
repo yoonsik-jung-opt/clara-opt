@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.model.problem import LPProblem
 from clara.reopt.analyzer import ImpactAnalyzer
 from clara.reopt.detector import ChangeDetector
@@ -50,7 +50,7 @@ def albici_columns() -> LPProblem:
 
 @pytest.fixture
 def base_state():
-    return RevisedSimplex(albici_base()).solve()
+    return HiGHSBackend().solve(albici_base())
 
 
 @pytest.fixture
@@ -95,7 +95,7 @@ class TestOguzBound:
         """c_j=0 in original → δ=inf → bound=1.0."""
         old = LPProblem(c=[0, 4, 5], A=albici_base().A, b=albici_base().b,
                         var_names=["x1", "x2", "x3"], constraint_names=["S1", "S2", "S3", "S4"])
-        old_state = RevisedSimplex(old).solve()
+        old_state = HiGHSBackend().solve(old)
         new = LPProblem(c=[1, 4, 5], A=albici_base().A, b=albici_base().b,
                         var_names=["x1", "x2", "x3"], constraint_names=["S1", "S2", "S3", "S4"])
         change = ChangeDetector().detect(old, new)

@@ -6,7 +6,7 @@ Demonstrates the full CLARA pipeline on a realistic problem:
 
 import numpy as np
 
-from clara.engine.simplex import RevisedSimplex
+from clara.engine import HiGHSBackend
 from clara.explain.explainer import Explainer
 from clara.explain.types import DetailLevel
 from clara.model.problem import LPProblem
@@ -128,7 +128,7 @@ def main():
     print(f"Periods: Q1-Q4, Sense: {base.sense}")
 
     # ========== STEP 1: Solve ==========
-    state = RevisedSimplex(base).solve()
+    state = HiGHSBackend().solve(base)
     print(f"\n--- Base Solution ---")
     print(f"Optimal profit: ${state.optimal_value:,.2f}")
     print(f"κ(B): {state.condition_number:.2e}")
@@ -175,7 +175,7 @@ def main():
     print(f"Change type: {change1.change_type.name}")
 
     # Solve perturbed
-    state1 = RevisedSimplex(pert1).solve()
+    state1 = HiGHSBackend().solve(pert1)
 
     # Attribution
     attr1 = ChangeAttributor().attribute(state, state1, base, pert1, change1, compute_shapley=False)
@@ -196,7 +196,7 @@ def main():
 
     forced1 = ReoptDecision(should_reoptimize=True, reason="bench", recommended_method="warm_start")
     result1 = Reoptimizer().reoptimize(state, pert1, change1, forced1, old_problem=base)
-    scratch1 = RevisedSimplex(pert1).solve()
+    scratch1 = HiGHSBackend().solve(pert1)
     print(f"Warm-start: method={result1.method_used}, pivots={result1.pivots}")
     print(f"Scratch: pivots={scratch1.iteration_count}")
     print(f"New optimal profit: ${result1.new_state.optimal_value:,.2f}")
@@ -220,7 +220,7 @@ def main():
     change2 = ChangeDetector().detect(base, pert2)
     print(f"Change type: {change2.change_type.name}")
 
-    state2 = RevisedSimplex(pert2).solve()
+    state2 = HiGHSBackend().solve(pert2)
     attr2 = ChangeAttributor().attribute(state, state2, base, pert2, change2, compute_shapley=False)
     print(f"Δz: ${abs(attr2.delta_z):+,.2f}")
     print(f"OBJ contribution: {abs(attr2.obj_effect)/max(abs(attr2.delta_z),1e-10)*100:.1f}%")

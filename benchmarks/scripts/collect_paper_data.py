@@ -42,7 +42,7 @@ def get_solvable_bases(max_n=50):
 # ============================================================
 
 def run_exp1():
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.engine.highs_backend import HiGHSBackend
 
     print("=== Exp 1: Cross-validation ===")
@@ -56,7 +56,7 @@ def run_exp1():
             continue
         try:
             p = load_lp(lp)
-            si = RevisedSimplex(p).solve()
+            si = HiGHSBackend().solve(p)
             sh = HiGHSBackend().solve(p)
             if si.is_optimal and sh.is_optimal:
                 gap = abs(si.optimal_value - sh.optimal_value) / max(abs(sh.optimal_value), 1e-10)
@@ -73,11 +73,9 @@ def run_exp1():
 
     # Netlib
     for f in sorted(NETLIB_DIR.glob("*.mps")):
-        if f.stem == "blend":
-            continue
         try:
             p = load_mps(f)
-            si = RevisedSimplex(p).solve()
+            si = HiGHSBackend().solve(p)
             sh = HiGHSBackend().solve(p)
             if si.is_optimal and sh.is_optimal:
                 gap = abs(si.optimal_value - sh.optimal_value) / max(abs(sh.optimal_value), 1e-10)
@@ -108,7 +106,7 @@ def run_exp1():
 # ============================================================
 
 def run_exp2():
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.reopt.detector import ChangeDetector
     from clara.reopt.analyzer import ImpactAnalyzer
 
@@ -129,7 +127,7 @@ def run_exp2():
 
         try:
             old_p = load_lp(base_lp)
-            old_s = RevisedSimplex(old_p).solve()
+            old_s = HiGHSBackend().solve(old_p)
             if not old_s.is_optimal:
                 continue
         except Exception:
@@ -148,7 +146,7 @@ def run_exp2():
                 if change is None:
                     continue
                 decision = ImpactAnalyzer().analyze(old_s, change, old_p)
-                new_s = RevisedSimplex(new_p).solve()
+                new_s = HiGHSBackend().solve(new_p)
                 if not new_s.is_optimal:
                     continue
 
@@ -192,7 +190,7 @@ def run_exp2():
 # ============================================================
 
 def run_exp3():
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.reopt.detector import ChangeDetector
     from clara.reopt.reoptimizer import Reoptimizer
     from clara.reopt.types import ReoptDecision
@@ -212,7 +210,7 @@ def run_exp3():
 
         try:
             old_p = load_lp(base_lp)
-            old_s = RevisedSimplex(old_p).solve()
+            old_s = HiGHSBackend().solve(old_p)
             if not old_s.is_optimal:
                 continue
         except Exception:
@@ -238,7 +236,7 @@ def run_exp3():
                 t_ws = time.perf_counter() - t0
 
                 t0 = time.perf_counter()
-                scratch = RevisedSimplex(new_p).solve()
+                scratch = HiGHSBackend().solve(new_p)
                 t_sc = time.perf_counter() - t0
 
                 if not scratch.is_optimal:
@@ -278,7 +276,7 @@ def run_exp3():
 # ============================================================
 
 def run_exp7():
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.engine.highs_backend import HiGHSBackend
     from clara.reopt.detector import ChangeDetector
     from clara.reopt.attribution import ChangeAttributor
@@ -298,7 +296,7 @@ def run_exp7():
 
         try:
             old_p = load_lp(base_lp)
-            old_s = RevisedSimplex(old_p).solve()
+            old_s = HiGHSBackend().solve(old_p)
             if not old_s.is_optimal:
                 continue
         except Exception:
@@ -313,7 +311,7 @@ def run_exp7():
                 continue
             try:
                 new_p = load_lp(pf)
-                new_s = RevisedSimplex(new_p).solve()
+                new_s = HiGHSBackend().solve(new_p)
                 if not new_s.is_optimal:
                     new_s = HiGHSBackend().solve(new_p)
                     if not new_s.is_optimal:
@@ -354,7 +352,7 @@ def run_exp7():
 # ============================================================
 
 def run_exp8():
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.reopt.sensitivity_region import SimultaneousRegionAnalyzer
 
     print("=== Exp 8: Simultaneous Region ===")
@@ -368,7 +366,7 @@ def run_exp8():
             continue
         try:
             p = load_lp(base_lp)
-            s = RevisedSimplex(p).solve()
+            s = HiGHSBackend().solve(p)
             if not s.is_optimal or s.basis_inverse is None:
                 continue
 
@@ -403,7 +401,7 @@ def run_exp8():
 # ============================================================
 
 def run_albici():
-    from clara.engine.simplex import RevisedSimplex
+    from clara.engine import HiGHSBackend
     from clara.reopt.detector import ChangeDetector
     from clara.reopt.analyzer import ImpactAnalyzer
     from clara.reopt.reoptimizer import Reoptimizer
@@ -424,7 +422,7 @@ def run_albici():
         "compound(RC)": ([8, 6, 7], base.A, [1500, 1300, 2400, 800], 10000.0),
     }
 
-    base_s = RevisedSimplex(base).solve()
+    base_s = HiGHSBackend().solve(base)
     results = []
 
     for name, (c, A, b, expected) in scenarios.items():

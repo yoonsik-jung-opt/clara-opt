@@ -87,7 +87,9 @@ def gen_warmstart_fig():
     fig, ax = plt.subplots(figsize=(3.4, 2.5))
     labels = sorted(methods.keys())
     data = [methods[l] for l in labels]
-    ax.boxplot(data, labels=[l.replace("_", "\n") for l in labels])
+    ax.boxplot(data)
+    ax.set_xticks(range(1, len(labels) + 1))
+    ax.set_xticklabels([l.replace("_", "\n") for l in labels])
     ax.set_ylabel("Speedup (× scratch)")
     ax.axhline(1.0, color="gray", linestyle="--", linewidth=0.5)
     fig.tight_layout()
@@ -250,6 +252,7 @@ def gen_region_histogram_fig():
 
 
 def main():
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     print("Generating figures:")
     gen_scalability_fig()
     gen_warmstart_fig()
