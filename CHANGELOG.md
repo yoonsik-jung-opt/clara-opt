@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - 2026-08-07
+## [0.3.0] - 2026-08-23
 
 ### Changed
 - **HiGHS is now the single solver backend.** After each solve, CLARA
@@ -41,6 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - B^-1 reconstruction validation test suite
   (`tests/test_cross_validation.py`), replacing the internal-vs-HiGHS
   cross-validation.
+- Medium-scale Netlib warm-start benchmark (solver-level timing via
+  `changeRowBounds`/`changeColCost` + `setBasis`) and refreshed
+  benchmark suite ported to the HiGHS backend.
+
+### Fixed
+- MPS parser: RHS sections whose lines omit the RHS vector name
+  (e.g. Netlib `blend`) were parsed as all-zero right-hand sides;
+  the parser now detects the unnamed-vector form and reads the
+  values correctly.
+- Package metadata: corrected author name and repository URLs.
 
 ## [0.2.2] - 2026-04-27
 

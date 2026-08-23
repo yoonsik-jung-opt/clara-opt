@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "Yoonsik Yang" },
+    { name = "Yoonsik Jung" },
 ]
 keywords = [
     "linear-programming",
@@ -57,9 +57,9 @@ dev = [
 clara = "clara.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yoonsikyang/clara-opt"
-Repository = "https://github.com/yoonsikyang/clara-opt"
-Issues = "https://github.com/yoonsikyang/clara-opt/issues"
+Homepage = "https://github.com/yoonsik-jung-opt/clara-opt"
+Repository = "https://github.com/yoonsik-jung-opt/clara-opt"
+Issues = "https://github.com/yoonsik-jung-opt/clara-opt/issues"
 
 # ---------------------------------------------------------------------------
 # ruff
