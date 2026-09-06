@@ -139,8 +139,15 @@ class Reoptimizer:
             return self._scratch(new_problem)
         x_B_new = B_inv @ b_aug_new
 
-        # Verify feasibility
+        # Certified recompute: the retained basis is optimal for the new
+        # data iff it is primal feasible (x_B >= 0) AND dual feasible
+        # (nonbasic reduced costs of the correct sign under the new c).
+        # One-at-a-time sensitivity ranges do not guarantee either
+        # property for simultaneous changes, so both are verified here
+        # and the reoptimizer falls back to a warm start otherwise.
         if np.any(x_B_new < -1e-8):
+            return self._warm_start(old_state, new_problem, change)
+        if not self._is_dual_feasible(new_problem, basis, B_inv, A_aug_new):
             return self._warm_start(old_state, new_problem, change)
 
         # Build full solution over the augmented column space
