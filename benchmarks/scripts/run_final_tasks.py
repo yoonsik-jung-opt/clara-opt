@@ -7,10 +7,15 @@ Task 4: ρ vs κ(B) correlation
 """
 
 import csv
+import sys
 import time
 from pathlib import Path
 
 import numpy as np
+
+# Make the sibling case-study script importable regardless of how clara
+# itself is installed (editable or from PyPI).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 RANDOM_DIR = Path(__file__).parent.parent / "instances" / "random"
 PERT_DIR = Path(__file__).parent.parent / "instances" / "perturbations"
@@ -53,7 +58,7 @@ def run_task1():
           f"ratio={r['ratio']:.4f}")
 
     # Case study
-    from benchmarks.scripts.supply_chain_case_study import create_base_problem
+    from supply_chain_case_study import create_base_problem
     sc, _, _ = create_base_problem()
     s_sc = HiGHSBackend().solve(sc)
     if s_sc.is_optimal:
@@ -64,7 +69,7 @@ def run_task1():
     # Random instances
     bases = get_bases(20)
     ratios = []
-    for name in bases[:30]:
+    for name in bases:
         lp = RANDOM_DIR / f"{name}.lp"
         if not lp.exists():
             continue
@@ -173,7 +178,7 @@ def run_task3():
     from clara.reopt.types import ReoptDecision
 
     print("=== Task 3: Runtime Breakdown (case study n=20) ===")
-    from benchmarks.scripts.supply_chain_case_study import create_base_problem, create_scenario_labor
+    from supply_chain_case_study import create_base_problem, create_scenario_labor
 
     base, _, _ = create_base_problem()
     pert = create_scenario_labor(base, labor_q3_delta=-40)
