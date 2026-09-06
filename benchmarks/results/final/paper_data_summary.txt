@@ -3,43 +3,43 @@ CLARA EXPERIMENT RESULTS — PAPER VALUES
 ============================================================
 
 === S6.1 Instance Statistics (from Exp 1) ===
-  Instances: 127
-  Degeneracy: 7/127 (5.5%)
-  κ(B): median=3.15e+02, max=4.83e+05
+  Instances: 128
+  Degeneracy: 8/128 (6.2%)
+  κ(B): median=3.17e+02, max=4.83e+05
   d₀: median=0.0638, min=0.0003
 
 === S6.2 Cross-validation (from Exp 1) ===
-  Total: 127, max_gap=1.51e-12, mean_gap=1.47e-14
+  Total: 128, max_gap=0.00e+00, mean_gap=0.00e+00
 
 === S6.3 Attribution (from Exp 7) ===
-  RC_small: n=270, RHS=138.6%, OBJ=131.9%, preserved=0/270
-  RC_medium: n=270, RHS=140.0%, OBJ=135.2%, preserved=1/270
-  RC_large: n=260, RHS=194.4%, OBJ=173.9%, preserved=0/260
-  RC_asym_bc: n=270, RHS=44.4%, OBJ=138.2%, preserved=0/270
-  RC_asym_cb: n=260, RHS=227.8%, OBJ=33.2%, preserved=0/260
-  η: mean=1.5956, median=0.3031, max=148.2199
+  RC_small: n=270, RHS=135.5%, OBJ=131.9%, preserved=121/270
+  RC_medium: n=270, RHS=132.7%, OBJ=135.2%, preserved=51/270
+  RC_large: n=260, RHS=189.8%, OBJ=173.9%, preserved=13/260
+  RC_asym_bc: n=270, RHS=42.0%, OBJ=138.2%, preserved=53/270
+  RC_asym_cb: n=260, RHS=219.0%, OBJ=33.2%, preserved=21/260
+  η: mean=0.9126, median=0.1350, max=132.4354
 
 === S6.4 Simultaneous Region (from Exp 8) ===
-  n=5-10: n=30, mean_r*=2.15, mean_ρ=12.7154, std=17.2104
-  n=11-20: n=30, mean_r*=0.76, mean_ρ=7.4480, std=16.0606
-  n=21-50: n=30, mean_r*=0.21, mean_ρ=9.4680, std=33.6353
-  ALL: n=90, mean_ρ=9.8772
-  d₀ vs ρ correlation: r=0.0994
+  n=5-10: n=30, mean_r*=2.83, mean_ρ=3.4752, std=4.4483
+  n=11-20: n=30, mean_r*=1.42, mean_ρ=4.2655, std=5.2273
+  n=21-50: n=30, mean_r*=0.69, mean_ρ=3.2917, std=4.1839
+  ALL: n=90, mean_ρ=3.6775
+  d₀ vs ρ correlation: r=-0.1759
 
 === S6.5 Decision Quality (from Exp 2) ===
-  TYPE_R: n=1340, TP=660, TN=291, FP=243, FN=146, acc=71.0%
+  TYPE_R: n=1340, TP=659, TN=293, FP=241, FN=147, acc=71.0%
   TYPE_C: n=810, TP=88, TN=337, FP=383, FN=2, acc=52.5%
-  TYPE_RC: n=1330, TP=736, TN=137, FP=382, FN=75, acc=65.6%
-  Total: n=3480, acc=64.6%, FN rate=6.4%
+  TYPE_RC: n=1330, TP=735, TN=137, FP=382, FN=76, acc=65.6%
+  Total: n=3480, acc=64.6%, FN rate=6.5%
 
 === S6.5 Warm-start (from Exp 3) ===
-  Total: n=2150, match=2024/2150
-  Speedup: mean=1.7x, median=1.0x, max=18.7x
-  Pivot reduction: mean=17.6%
+  Total: n=2150, match=2150/2150
+  Speedup: mean=1.0x, median=1.0x, max=2.1x
+  Pivot reduction: mean=88.1%
 
 === Albici Golden Tests ===
   base→b1: method=warm_start, pivots=0, z=3677.7778, match=✓
   base→b2: method=warm_start_dual, pivots=1, z=4300.0000, match=✓
   base→cost: method=warm_start, pivots=1, z=8266.6667, match=✓
-  base→columns: method=scratch, pivots=5, z=3744.4444, match=✓
+  base→columns: method=scratch, pivots=4, z=3744.4444, match=✓
   compound(RC): method=parametric_lp, pivots=2, z=10000.0000, match=✓
