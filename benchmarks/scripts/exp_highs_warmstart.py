@@ -98,10 +98,14 @@ def run_comparison(base_problem, pert_problem, base_state):
     h2.setOptionValue("solver", "simplex")
     load_to_highs(h2, pert_problem)
     col_st, row_st = extract_highs_basis(base_state, pert_problem)
-    try:
-        h2.setBasis(col_st, row_st)
-    except Exception:
-        pass  # setBasis may fail for dimension mismatch
+    basis_obj = highspy.HighsBasis()
+    basis_obj.col_status = col_st
+    basis_obj.row_status = row_st
+    basis_obj.valid = True
+    basis_obj.alien = True
+    status = h2.setBasis(basis_obj)
+    if status != highspy.HighsStatus.kOk:
+        raise RuntimeError(f"HiGHS setBasis rejected the warm-start basis: {status}")
     t0 = time.perf_counter()
     h2.run()
     highs_warm_t = time.perf_counter() - t0
