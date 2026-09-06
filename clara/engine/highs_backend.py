@@ -133,6 +133,22 @@ class HiGHSBackend:
                 upper_bound=float(problem.upper_bounds[j]) if problem.upper_bounds is not None else float("inf"),
             ))
 
+        # Reconstruct B^-1 of the augmented system from the HiGHS basis
+        recon = self._reconstruct_basis_inverse(problem, sol, basis)
+        if recon is not None:
+            B_inv, basis_indices, cond_num, degen_count, d0 = recon
+        else:
+            B_inv, basis_indices, cond_num, degen_count, d0 = None, None, None, 0, None
+
+        # Exact basis-preserving RHS ranges from B^-1. HiGHS row-bound
+        # ranging is only a basis-preserving range for binding (nonbasic)
+        # rows; for basic (non-binding) rows it reports the range of the
+        # row activity, which does not even contain the current rhs. The
+        # exact range for row k follows from x_B + B^-1[:, k] * delta >= 0.
+        exact_rhs = None
+        if B_inv is not None:
+            exact_rhs = self._exact_rhs_ranges(problem, B_inv)
+
         # Build constraint info
         constraints = []
         rhs_ranges: dict[str, tuple[float, float]] = {}
@@ -144,8 +160,11 @@ class HiGHSBackend:
             bs = self._map_row_basis(basis.row_status[i])
             con_name = problem.constraint_names[i]
 
-            rhs_lo = ranging_data.row_bound_dn.value_[i]
-            rhs_hi = ranging_data.row_bound_up.value_[i]
+            if exact_rhs is not None:
+                rhs_lo, rhs_hi = exact_rhs[i]
+            else:
+                rhs_lo = ranging_data.row_bound_dn.value_[i]
+                rhs_hi = ranging_data.row_bound_up.value_[i]
             rhs_ranges[con_name] = (rhs_lo, rhs_hi)
 
             constraints.append(ConstraintInfo(
@@ -162,13 +181,6 @@ class HiGHSBackend:
             obj_coeff_ranges=obj_ranges,
             rhs_ranges=rhs_ranges,
         )
-
-        # Reconstruct B^-1 of the augmented system from the HiGHS basis
-        recon = self._reconstruct_basis_inverse(problem, sol, basis)
-        if recon is not None:
-            B_inv, basis_indices, cond_num, degen_count, d0 = recon
-        else:
-            B_inv, basis_indices, cond_num, degen_count, d0 = None, None, None, 0, None
 
         return SolveState(
             status=SolveStatus.OPTIMAL,
@@ -189,6 +201,42 @@ class HiGHSBackend:
             variable_names=tuple(problem.var_names),
             constraint_names=tuple(problem.constraint_names),
         )
+
+
+    # ------------------------------------------------------------------
+    # Exact RHS ranging from the reconstructed basis inverse
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _exact_rhs_ranges(problem: LPProblem, B_inv) -> list[tuple[float, float]]:
+        """Basis-preserving range of each original rhs b_k, from B^-1.
+
+        With x_B(delta) = x_B + B^-1[:, k] * delta, the basis stays
+        primal feasible (hence optimal) iff every component stays
+        nonnegative, giving the allowable decrease and increase by two
+        ratio tests. Rows of the augmented system beyond the original m
+        (explicit upper-bound rows) are not ranged here.
+        """
+        import clara.engine.standard_form as standard_form
+
+        _, b_aug, _ = standard_form.add_upper_bound_rows(problem)
+        x_B = B_inv @ b_aug
+        m = problem.A.shape[0]
+        out = []
+        for k in range(m):
+            col = B_inv[:, k]
+            dec = float("inf")
+            inc = float("inf")
+            for i in range(len(col)):
+                if col[i] > 1e-12:
+                    dec = min(dec, max(x_B[i], 0.0) / col[i])
+                elif col[i] < -1e-12:
+                    inc = min(inc, max(x_B[i], 0.0) / (-col[i]))
+            b_k = float(problem.b[k])
+            lo = b_k - dec if dec != float("inf") else float("-inf")
+            hi = b_k + inc if inc != float("inf") else float("inf")
+            out.append((lo, hi))
+        return out
 
     # ------------------------------------------------------------------
     # Model construction

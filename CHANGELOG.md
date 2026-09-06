@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-09-06
+
+### Fixed
+- **RHS sensitivity ranges for non-binding constraints.** HiGHS row-bound
+  ranging reports, for a basic (non-binding) row, the range of the row
+  activity rather than the basis-preserving range of the right-hand
+  side, and the value does not even contain the current rhs. The
+  backend now computes exact rhs ranges from the reconstructed basis
+  inverse (`x_B + B^-1[:, k] * delta >= 0`), which also matches HiGHS
+  for binding rows. This affected the simultaneous sensitivity region
+  (OAT bounding box), the simultaneity ratio, and the first screening
+  stage of the impact analyzer. A regression test re-solves at the
+  range endpoints (`tests/test_rhs_ranges_exact.py`).
+- **Certified recompute.** The zero-pivot recompute path now verifies
+  dual feasibility of the retained basis under the new objective (in
+  addition to primal feasibility) and falls back to a warm start
+  otherwise, so skipped re-solves are exact by construction.
+- Simultaneity ratio uses RHS tolerances only (Definition 3 of the
+  paper); objective tolerances enter the joint region analysis.
+- Paper figure script draws the asymmetric OAT box.
+
 ## [0.3.0] - 2026-08-23
 
 ### Changed

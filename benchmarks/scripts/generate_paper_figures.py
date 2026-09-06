@@ -37,15 +37,22 @@ def fig5_left():
     proj = json.load(open(RESULTS / "exp8_albici_projections.json"))
     key, i, j = "0_2", 0, 2
     verts = proj[key]
-    a1, a2 = reg.oat_rhs_tolerances[names[i]], reg.oat_rhs_tolerances[names[j]]
+    # Asymmetric OAT box [-alpha^-, alpha^+] per Definition 1 of the paper
+    lo_i, hi_i = s.sensitivity.rhs_ranges[names[i]]
+    lo_j, hi_j = s.sensitivity.rhs_ranges[names[j]]
+    bi, bj = float(p.b[i]), float(p.b[j])
+    x0, x1 = lo_i - bi, hi_i - bi
+    y0, y1 = lo_j - bj, hi_j - bj
 
     fig, ax = plt.subplots(figsize=(3.6, 3.2))
     ax.add_patch(Polygon(verts, closed=True, alpha=0.35, color="steelblue"))
     xs, ys = zip(*verts)
     ax.plot(list(xs) + [xs[0]], list(ys) + [ys[0]], "b-", lw=0.6,
             label=r"$\mathcal{S}$ (simultaneous)")
-    ax.add_patch(Rectangle((-a1, -a2), 2 * a1, 2 * a2, fill=False,
-                           ls="--", ec="crimson", lw=1.0, label="OAT box"))
+    ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False,
+                           ls="--", ec="crimson", lw=1.2, label="OAT box"))
+    ax.set_xlim(x0 - 0.08 * (x1 - x0), x1 + 0.08 * (x1 - x0))
+    ax.set_ylim(y0 - 0.08 * (y1 - y0), y1 + 0.08 * (y1 - y0))
     ax.axhline(0, color="gray", lw=0.4)
     ax.axvline(0, color="gray", lw=0.4)
     ax.set_xlabel(f"$\\Delta b$ ({names[i]})")
@@ -61,14 +68,14 @@ def fig5_right():
     rho = [float(r["simultaneity_ratio"]) for r in rows
            if float(r["chebyshev_radius"]) > 1e-10]
     fig, ax = plt.subplots(figsize=(3.6, 3.2))
-    ax.hist(np.clip(rho, 0, 60), bins=40, color="steelblue",
+    ax.hist(np.clip(rho, 0, 25), bins=40, color="steelblue",
             edgecolor="white", lw=0.3)
     ax.axvline(np.mean(rho), color="darkorange", lw=1.3,
                label=f"mean {np.mean(rho):.1f}")
     ax.axvline(np.median(rho), color="crimson", lw=1.3, ls="--",
                label=f"median {np.median(rho):.1f}")
     ax.axvline(1.0, color="gray", lw=0.8, ls=":")
-    ax.set_xlabel(r"Simultaneity ratio $\rho = r^*/\alpha_{\min}$ (clipped at 60)")
+    ax.set_xlabel(r"Simultaneity ratio $\rho = r^*/\alpha_{\min}$ (clipped at 25)")
     ax.set_ylabel("Instances")
     ax.legend(fontsize=7)
     fig.tight_layout()
