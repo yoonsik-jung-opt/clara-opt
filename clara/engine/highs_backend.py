@@ -81,7 +81,9 @@ class HiGHSBackend:
         if simplex_strategy is not None:
             h.setOptionValue("simplex_strategy", int(simplex_strategy))
 
+        t_run = time.perf_counter()
         h.run()
+        run_elapsed = time.perf_counter() - t_run
         elapsed = time.perf_counter() - start
 
         status = self._map_status(h.getModelStatus())
@@ -197,6 +199,7 @@ class HiGHSBackend:
             condition_number=cond_num,
             degenerate_count=degen_count,
             basis_robustness_d0=d0,
+            simplex_time_seconds=run_elapsed,
             problem_name=problem.name,
             variable_names=tuple(problem.var_names),
             constraint_names=tuple(problem.constraint_names),

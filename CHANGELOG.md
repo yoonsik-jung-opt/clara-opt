@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paper); objective tolerances enter the joint region analysis.
 - Paper figure script draws the asymmetric OAT box.
 
+### Added
+- `SolveState.simplex_time_seconds`: time of the HiGHS simplex run alone
+  (excluding model construction, ranging and basis reconstruction), so
+  warm-start and cold-start solves can be compared at the solver level.
+  The warm-start benchmark records it as `run_time_*` columns and the
+  cold side is now timed over the same span as the warm side.
+
 ## [0.3.0] - 2026-08-23
 
 ### Changed

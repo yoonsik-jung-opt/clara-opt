@@ -213,6 +213,10 @@ class SolveState:
     degenerate_count: int = 0                  # basic vars with value < 1e-8
     basis_robustness_d0: Optional[float] = None  # min_i x_B[i] / ||B⁻¹_i||₂
 
+    # --- Simplex run time only (HiGHS run(), excluding model construction,
+    #     ranging and basis reconstruction); None for basis routines ---
+    simplex_time_seconds: Optional[float] = None
+
     # --- Problem reference (for context in explanations) ---
     problem_name: str = ""
     variable_names: tuple[str, ...] = ()

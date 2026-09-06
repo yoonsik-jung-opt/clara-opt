@@ -77,10 +77,12 @@ def process_single(task):
             old_state, new_problem, change, forced_decision, old_problem=old_problem
         )
 
-        # Scratch solve
-        t0 = time.perf_counter()
+        # Scratch solve. Time the same span as the warm start (model
+        # build + simplex run, reported by the backend as
+        # solve_time_seconds) so the two sides are comparable; ranging
+        # and basis-inverse reconstruction are excluded on both sides.
         scratch = HiGHSBackend().solve(new_problem)
-        t_scratch = time.perf_counter() - t0
+        t_scratch = scratch.solve_time_seconds
         if not scratch.is_optimal:
             return None
 
@@ -106,6 +108,8 @@ def process_single(task):
             "speedup": f"{speedup:.1f}",
             "time_warmstart": f"{result.reopt_time_seconds:.6f}",
             "time_scratch": f"{t_scratch:.6f}",
+            "run_time_warmstart": f"{(result.new_state.simplex_time_seconds or 0.0):.6f}",
+            "run_time_scratch": f"{(scratch.simplex_time_seconds or 0.0):.6f}",
             "optimal_match": opt_match,
             "z_warmstart": f"{z_warm:.6f}",
             "z_scratch": f"{z_scratch_val:.6f}",
@@ -163,8 +167,12 @@ def main():
             if (i + 1) % 20 == 0:
                 print(f"  [{i+1}/{len(tasks)}] {len(results)} successful")
 
+    errors = [r for r in results if "error" in r]
+    results = [r for r in results if "error" not in r]
+    if errors:
+        print(f"\nWARNING: {len(errors)} pairs failed; first error: {errors[0]['error']}")
     if not results:
-        print("No results.")
+        print("No successful results; nothing written.")
         return
 
     out = RESULTS_DIR / "exp3_warmstart.csv"
