@@ -287,3 +287,43 @@ class TestConfigurableThreshold:
         decision = lenient.analyze(base_state, change, albici_base())
         # With 50% threshold, moderate changes should be skipped
         assert not decision.should_reoptimize
+
+
+class TestCertifiedOguzBound:
+    """The Wendell-tightened Oguz bound must dominate the realized
+    opportunity cost of keeping the stale solution (Type C)."""
+
+    @staticmethod
+    def _perturb(problem, seed, mag):
+        rng = np.random.RandomState(seed)
+        c = np.asarray(problem.c, dtype=float)
+        dc = c * rng.uniform(-mag, mag, len(c))
+        return LPProblem(c=c + dc, A=problem.A, b=problem.b, sense=problem.sense,
+                         var_names=problem.var_names, constraint_names=problem.constraint_names,
+                         upper_bounds=problem.upper_bounds)
+
+    @pytest.mark.parametrize("seed", [1, 2, 3, 4, 5, 6])
+    def test_bound_dominates_realized_loss(self, seed):
+        rng = np.random.default_rng(seed)
+        n, m = 12, 15
+        A = rng.standard_normal((m, n)) * (rng.random((m, n)) < 0.5)
+        xbar = rng.uniform(1, 10, n)
+        old = LPProblem(c=rng.uniform(0.1, 5, n), A=A, b=A @ xbar + rng.uniform(0.1, 10, m),
+                        sense="maximize", upper_bounds=3 * xbar)
+        old_state = HiGHSBackend().solve(old)
+        assert old_state.basis_inverse is not None
+        x_old = np.array([v.value for v in old_state.variables])
+        analyzer = ImpactAnalyzer()
+        tau = analyzer._wendell_objective_tolerance(old, old_state)
+        assert 0.0 <= tau < float("inf")
+        for k, mag in enumerate((0.005, 0.02, 0.1, 0.4)):
+            new = self._perturb(old, 100 * seed + k, mag)
+            change = ChangeDetector().detect(old, new)
+            raw, tight, _ = analyzer._oguz_bound(change, old, old_state)
+            z_new = HiGHSBackend().solve(new).optimal_value
+            actual = (z_new - float(new.c @ x_old)) / abs(z_new)
+            assert tight <= raw + TOL
+            assert actual <= tight + 1e-9, f"mag={mag}: loss {actual:.5f} > bound {tight:.5f}"
+            theta = max(abs(change.delta_c[j] / old.c[j]) for j in range(n))
+            if theta <= tau:
+                assert tight == 0.0 and actual < 1e-9

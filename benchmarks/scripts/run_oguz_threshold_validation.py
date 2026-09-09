@@ -82,6 +82,17 @@ def process_base(base_name):
                     rel = (abs(new_state.optimal_value - old_state.optimal_value)
                            / max(abs(old_state.optimal_value), 1.0))
                     oracle = rel > ORACLE_TOL
+                    # Opportunity cost of keeping the stale solution x*
+                    # under the new objective (the quantity the Oguz
+                    # bound certifies; for Type R x* may be infeasible,
+                    # in which case the entry is left blank).
+                    oc = ""
+                    if ptype == "C":
+                        x_old = np.array([v.value for v in old_state.variables])
+                        z_stale = float(new_problem.c @ x_old)
+                        sgn = 1.0 if problem.sense != "minimize" else -1.0
+                        oc_val = sgn * (new_state.optimal_value - z_stale) / max(abs(new_state.optimal_value), 1e-12)
+                        oc = f"{oc_val:.6e}"
                 except Exception:
                     continue
 
@@ -106,6 +117,7 @@ def process_base(base_name):
                         "skip_source": skip_source,
                         "oracle_decision": oracle,
                         "rel_value_change": f"{rel:.6e}",
+                        "opportunity_cost": oc,
                     })
     return rows
 
@@ -152,9 +164,16 @@ def main():
         fn_screen = sum(1 for r in rr if r["skip_source"] == "screening"
                         and r["oracle_decision"])
         acc = (tp + tn) / len(rr) if rr else 0
+        sc_rows = [r for r in rr if r["skip_source"] == "screening"]
+        max_val = max((float(r["rel_value_change"]) for r in sc_rows), default=0.0)
+        max_oc = max((float(r["opportunity_cost"]) for r in sc_rows
+                      if r["opportunity_cost"]), default=0.0)
+        viol = sum(1 for r in sc_rows if r["opportunity_cost"]
+                   and float(r["opportunity_cost"]) > eps + 1e-9)
         print(f"eps={eps:.0%}: pairs={len(rr)} TP={tp} TN={tn} FP={fp} FN={fn} "
               f"acc={acc:.1%} | skips: range={sr} screening={sc} "
-              f"(screening FN={fn_screen})")
+              f"(screening FN={fn_screen}; max value change {max_val:.4%}; "
+              f"max opportunity cost {max_oc:.4%}; contract violations {viol})")
 
 
 if __name__ == "__main__":
