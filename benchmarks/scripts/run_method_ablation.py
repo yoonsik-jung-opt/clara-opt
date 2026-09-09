@@ -76,7 +76,12 @@ def process_single(task):
             "n_cons": old_problem.num_constraints,
         }
         z_ref = None
-        for arm in ARMS:
+        # Rotate the arm order per pair so that no arm systematically
+        # runs first (cold caches) or last; timings are then comparable
+        # across arms.  Iteration counts are unaffected by the order.
+        shift = task["index"] % len(ARMS)
+        order = ARMS[shift:] + ARMS[:shift]
+        for arm in order:
             if arm == "rule":
                 dec = ReoptDecision(should_reoptimize=True, reason="ablation",
                                     recommended_method="warm_start")
@@ -89,10 +94,13 @@ def process_single(task):
             else:
                 t, it, z = timed(backend.solve(new_problem, initial_basis=basis,
                                                simplex_strategy=fixed[arm]))
-            if z_ref is None:
+            if arm == "rule":
                 z_ref = z
             row[f"{arm}_time"] = f"{t:.6f}"
             row[f"{arm}_iters"] = it
+            row[f"{arm}_z"] = z
+        for arm in ARMS:
+            z = row.pop(f"{arm}_z")
             row[f"{arm}_match"] = abs(z - z_ref) < max(abs(z_ref) * 1e-6, 1e-4)
         return row
     except Exception as e:  # pragma: no cover - benchmark robustness
@@ -120,7 +128,8 @@ def main():
             pf = PERTURBATIONS_DIR / base_name / f"{pi['instance']}.lp"
             if pf.exists():
                 tasks.append({"base_file": str(base_file), "pert_file": str(pf),
-                              "base_name": base_name, "pert_info": dict(pi)})
+                              "base_name": base_name, "pert_info": dict(pi),
+                              "index": len(tasks)})
 
     print(f"Exp 9: method-selection ablation on {len(tasks)} pairs (workers={args.workers})...")
     results = []
