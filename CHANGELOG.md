@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `SensitivityRegion.chebyshev_radius_face`: Chebyshev radius of the
+  basis-preserving polyhedron restricted to the RHS parameters with
+  positive two-sided tolerance, with `n_degenerate_params` and
+  `n_two_sided_zero` counts. On degenerate bases a parameter with
+  zero tolerance on both sides pins its coordinate and forces the
+  full-dimensional radius to zero; the face-restricted radius reports
+  joint safety along the parameters that can move.
+- Netlib region experiment (`benchmarks/scripts/run_region_netlib.py`,
+  `benchmarks/results/final/exp8_netlib_region.csv`).
+
+### Fixed
+- The Chebyshev program returns an infinite radius when the region
+  contains balls of arbitrarily large radius (HiGHS status unbounded);
+  it previously reported zero.
+
 ## [0.3.1] - 2026-09-06
 
 ### Fixed

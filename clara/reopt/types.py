@@ -229,6 +229,15 @@ class SensitivityRegion:
 
     projections: Optional[dict] = None  # {(i, j): [(x, y), ...]}
 
+    # Face-restricted Chebyshev radius: largest ball inscribed in S after
+    # fixing every rhs coordinate whose one-sided tolerance is zero on at
+    # least one side (degenerate parameters). Equals chebyshev_radius when
+    # no parameter is degenerate; stays positive when degeneracy collapses
+    # the full-dimensional ball.
+    chebyshev_radius_face: Optional[float] = None
+    n_degenerate_params: int = 0       # rhs coords with a zero one-sided tolerance
+    n_two_sided_zero: int = 0          # rhs coords with zero tolerance on both sides
+
     @property
     def summary(self) -> str:
         r = self.chebyshev_radius

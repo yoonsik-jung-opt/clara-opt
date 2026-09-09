@@ -83,3 +83,35 @@ class TestProjection:
         if region.projections and (0, 1) in region.projections:
             verts = region.projections[(0, 1)]
             assert len(verts) > 0
+
+
+class TestDegenerateAndUnbounded:
+    """Face-restricted radius and the unbounded Chebyshev program."""
+
+    @staticmethod
+    def _two_block_problem():
+        # Block A (x1, x2): three constraints meet at the optimum (1, 0),
+        # so the basis {x1, x2, s3} is degenerate and b1 has zero
+        # tolerance on both sides.  Block B (x3, x4) is non-degenerate.
+        A = np.array([[1, 1, 0, 0], [1, -1, 0, 0], [1, 0, 0, 0],
+                      [0, 0, 1, 0], [0, 0, 1, 1]], float)
+        return LPProblem(c=[1, 0, 1, 0.5], A=A, b=[1, 1, 1, 5, 8],
+                         sense="maximize", name="two_block")
+
+    def test_face_restricted_radius_recovers_healthy_block(self):
+        prob = self._two_block_problem()
+        state = HiGHSBackend().solve(prob, initial_basis=(0, 1, 6, 2, 3))
+        assert state.degenerate_count == 2
+        region = SimultaneousRegionAnalyzer().analyze(state, prob)
+        assert region.n_two_sided_zero == 1
+        assert region.chebyshev_radius == pytest.approx(0.0, abs=1e-9)
+        # Block B: strip -5 <= d4 <= 3 in the (d4, d5) face -> radius 4.
+        assert region.chebyshev_radius_face == pytest.approx(4.0, abs=1e-6)
+
+    def test_unbounded_chebyshev_program_reports_infinite_radius(self):
+        analyzer = SimultaneousRegionAnalyzer()
+        # Single free coordinate bounded below only: {d : -d <= 3}.
+        radius, center = analyzer._chebyshev_center(
+            np.array([[-1.0]]), np.array([3.0]))
+        assert radius == float("inf")
+        assert center is None
