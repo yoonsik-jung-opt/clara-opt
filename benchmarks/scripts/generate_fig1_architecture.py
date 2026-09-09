@@ -77,29 +77,29 @@ def main():
         fontsizes=[9.5, 8.5])
 
     # --- SolveState (emphasized) ---
-    box(ax, 0.735, ymid, 0.21, 0.23,
-        ["SolveState",
+    box(ax, 0.735, ymid, 0.22, 0.23,
+        ["Retained basis",
          r"$B^{-1},\ x_B = B^{-1} b$",
-         r"$y^* = c_B^{\top} B^{-1},\ \bar{c}$",
+         r"$y = c_B^{\top} B^{-1},\ \bar{c}$",
          r"$\kappa(B),\ d_0$"],
         CREAM, lw=2.2,
-        fontsizes=[10.5, 9.0, 9.0, 9.0], bold_first=True)
+        fontsizes=[10.0, 9.0, 9.0, 9.0], bold_first=True)
 
     # --- Right column modules ---
     rx, rw = 1.185, 0.33
     box(ax, rx, 0.535, rw, 0.1,
-        ["Region Analyzer:",
-         r"$\mathcal{S},\ r^*,\ d_0,\ \delta^*$"],
+        ["Sensitivity geometry (Sec. 4):",
+         r"$\mathcal{S},\ r^*,\ r^*_F,\ d_0,\ \delta^*$"],
         GRAY, fontsizes=[9.5, 9.0])
 
     box(ax, rx, 0.36, rw, 0.115,
-        ["Reoptimization pipeline:",
-         r"detect $\rightarrow$ screen $\rightarrow$ warm-start /",
-         "parametric / recompute"],
+        ["Reoptimization decisions (Sec. 5):",
+         r"screen $\rightarrow$ bound $\rightarrow$ certify /",
+         "primal / dual / parametric"],
         GRAY, fontsizes=[9.5, 8.3, 8.3])
 
     box(ax, rx, 0.175, rw, 0.1,
-        ["DiffReport:",
+        ["Comparison report:",
          r"binding, attribution, $\eta$"],
         GRAY, fontsizes=[9.5, 9.0])
 

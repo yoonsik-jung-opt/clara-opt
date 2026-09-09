@@ -66,6 +66,28 @@ class SimultaneousRegionAnalyzer:
 
         ratio = radius / min_oat if min_oat > 1e-10 else 0.0
 
+        # Face-restricted radius: drop degenerate rhs coordinates (a zero
+        # one-sided tolerance) and inscribe the ball in the remaining face.
+        keep, n_degen, n_both = [], 0, 0
+        for k, con in enumerate(state.constraints[:m]):
+            lo, hi = state.sensitivity.rhs_ranges.get(con.name, (float("-inf"), float("inf")))
+            t_dn = con.rhs - lo if not math.isinf(lo) else float("inf")
+            t_up = hi - con.rhs if not math.isinf(hi) else float("inf")
+            if t_dn > 1e-9 and t_up > 1e-9:
+                keep.append(k)
+            else:
+                n_degen += 1
+                if t_dn <= 1e-9 and t_up <= 1e-9:
+                    n_both += 1
+        if n_degen == 0:
+            radius_face = radius
+        elif keep:
+            Hk = H[:, keep]
+            mask = np.abs(Hk).sum(axis=1) > 1e-14
+            radius_face, _ = self._chebyshev_center(Hk[mask], h[mask])
+        else:
+            radius_face = 0.0
+
         # Projections
         projections = None
         if projection_pairs and radius > 0:
@@ -83,6 +105,9 @@ class SimultaneousRegionAnalyzer:
             oat_rhs_tolerances=oat_rhs,
             oat_obj_tolerances=oat_obj,
             projections=projections,
+            chebyshev_radius_face=radius_face,
+            n_degenerate_params=n_degen,
+            n_two_sided_zero=n_both,
         )
 
     def analyze_joint(
@@ -334,7 +359,12 @@ class SimultaneousRegionAnalyzer:
 
         hi.run()
 
-        if hi.getModelStatus() != highspy.HighsModelStatus.kOptimal:
+        status = hi.getModelStatus()
+        if status == highspy.HighsModelStatus.kUnbounded:
+            # S contains balls of arbitrarily large radius (Remark 1 of
+            # the paper): report an infinite radius, not zero.
+            return float("inf"), None
+        if status != highspy.HighsModelStatus.kOptimal:
             return 0.0, None
 
         sol = hi.getSolution()

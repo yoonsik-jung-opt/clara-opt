@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `SensitivityRegion.chebyshev_radius_face`: Chebyshev radius of the
+  basis-preserving polyhedron restricted to the RHS parameters with
+  positive two-sided tolerance, with `n_degenerate_params` and
+  `n_two_sided_zero` counts. On degenerate bases a parameter with
+  zero tolerance on both sides pins its coordinate and forces the
+  full-dimensional radius to zero; the face-restricted radius reports
+  joint safety along the parameters that can move.
+- Netlib region experiment (`benchmarks/scripts/run_region_netlib.py`,
+  `benchmarks/results/final/exp8_netlib_region.csv`).
+
+### Changed
+- **Certified Oguz screening bound.** The Type C screening step now
+  computes Oguz's bound with the componentwise maximum relative
+  objective change and tightens it with the Wendell (1985)
+  *simultaneous* objective tolerance of the retained basis,
+  `2(eta - tau) / ((1 - tau)(1 + eta))` (maximize; `(1 + tau)(1 - eta)`
+  for minimize), which is a proven upper bound on the relative
+  opportunity cost of keeping the stale solution (Proposition S2 of
+  the paper supplement). Previously the tightening used the smallest
+  one-at-a-time objective tolerance and the formula
+  `2 t'/(1 + t')`, `t' = (eta - a)/(1 + a)`, which is not a valid
+  bound: it was violated on 33 of 2,160 Type C perturbations of the
+  benchmark suite (`benchmarks/scripts/check_oguz_tightening.py`).
+  The bound is disabled (reported as 1.0) when an objective
+  coefficient is negative or a zero coefficient is perturbed.
+  `ImpactAnalyzer._wendell_objective_tolerance` exposes the tolerance.
+
+### Fixed
+- **Type C skips are certified.** The impact analyzer now routes every
+  skip recommendation for objective-coefficient changes (all changes
+  within their one-at-a-time ranges, or Oguz bound below threshold)
+  through the certified recompute path, which verifies dual
+  feasibility of the retained basis under the new objective and falls
+  back to a warm start otherwise. Previously such skips kept the stale
+  solution without verification (`method_used == "none"`), which can
+  lose objective value when a simultaneous change leaves every
+  individual range but breaks the basis. `_no_action` remains
+  available but is no longer selected by the analyzer.
+- The Chebyshev program returns an infinite radius when the region
+  contains balls of arbitrarily large radius (HiGHS status unbounded);
+  it previously reported zero.
+
 ## [0.3.1] - 2026-09-06
 
 ### Fixed

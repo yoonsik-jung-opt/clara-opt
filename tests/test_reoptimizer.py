@@ -63,19 +63,49 @@ def full_pipeline(old_problem, new_problem, base_state):
 
 
 # ============================================================
-# 1. Method "none"
+# 1. Type C skip → certified recompute
 # ============================================================
 
-class TestMethodNone:
+class TestTypeCSkip:
 
-    def test_none_preserves_solution(self, base_state):
-        """Small cost change within range → same solution, different obj."""
+    def test_type_c_skip_is_certified_recompute(self, base_state):
+        """Small cost change within range → recompute path, same basis, 0 pivots."""
         new = LPProblem(c=[3.01, 4.01, 5.01], A=albici_base().A, b=albici_base().b,
                         var_names=["x1", "x2", "x3"], constraint_names=["S1", "S2", "S3", "S4"])
-        result, _ = full_pipeline(albici_base(), new, base_state)
-        assert result.method_used == "none"
+        result, decision = full_pipeline(albici_base(), new, base_state)
+        assert not decision.should_reoptimize
+        assert decision.recommended_method == "recompute"
+        assert result.method_used == "recompute"
         assert result.pivots == 0
         assert result.basis_preserved
+
+    def test_type_c_skip_falls_back_when_joint_change_breaks_basis(self):
+        """Every objective change lies inside its one-at-a-time range, so the
+        analyzer skips, but the simultaneous change makes the retained basis
+        dual infeasible: the certified recompute must fall back to a warm
+        start and return the true optimum (stale solution would lose)."""
+        import sys
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        sys.path.insert(0, str(root / "benchmarks" / "scripts"))
+        from generate_perturbations import generate_perturbation  # noqa: E402
+        from clara.io.lp_parser import read_lp
+        old = read_lp(root / "benchmarks" / "instances" / "random" / "rand_n10_m10_d5_s456.lp")
+        old_state = HiGHSBackend().solve(old)
+        new_c, _, _, _ = generate_perturbation(old, "C_medium", "C", 0, 0.20, 456)
+        new = LPProblem(c=new_c, A=old.A, b=old.b, sense=old.sense, var_names=old.var_names,
+                        constraint_names=old.constraint_names, upper_bounds=old.upper_bounds)
+        change = ChangeDetector().detect(old, new)
+        decision = ImpactAnalyzer().analyze(old_state, change, old)
+        assert not decision.should_reoptimize and decision.within_sensitivity
+        result = Reoptimizer().reoptimize(old_state, new, change, decision, old_problem=old)
+        z_true = HiGHSBackend().solve(new).optimal_value
+        x_old = np.array([v.value for v in old_state.variables])
+        stale_loss = abs(float(new.c @ x_old) - z_true) / abs(z_true)
+        assert stale_loss > 1e-3, "instance no longer exercises the fallback"
+        assert result.method_used == "warm_start"
+        assert not result.basis_preserved
+        assert abs(result.new_state.optimal_value - z_true) < 1e-8 * max(1.0, abs(z_true))
 
     def test_none_correct_objective(self, base_state):
         """New objective = c_new^T @ x_old."""

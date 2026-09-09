@@ -75,7 +75,7 @@ def fig5_right():
     ax.axvline(np.median(rho), color="crimson", lw=1.3, ls="--",
                label=f"median {np.median(rho):.1f}")
     ax.axvline(1.0, color="gray", lw=0.8, ls=":")
-    ax.set_xlabel(r"Simultaneity ratio $\rho = r^*/\alpha_{\min}$ (clipped at 25)")
+    ax.set_xlabel(r"Simultaneity ratio $\sigma = r^*/\alpha_{\min}$ (clipped at 25)")
     ax.set_ylabel("Instances")
     ax.legend(fontsize=7)
     fig.tight_layout()
